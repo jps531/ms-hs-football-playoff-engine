@@ -17,6 +17,7 @@ from backend.helpers.region_image import (
     CARD_PAD,
     COL_GAP,
     COL_W,
+    LINK_H,
     PAD,
     SHOW_ALL_PAGES,
     SIZE,
@@ -42,7 +43,7 @@ from backend.helpers.share_cards import (
     slugify,
     standing_positions,
 )
-from backend.helpers.static_pages import MODE_LABELS, game_date, insight_cards, outcome_cards, region_path
+from backend.helpers.static_pages import game_date, insight_cards, outcome_cards, region_path
 
 ODDS_KEYS = (("p1", "1st"), ("p2", "2nd"), ("p3", "3rd"), ("p4", "4th"), ("p_playoffs", "Playoffs"))
 
@@ -130,8 +131,8 @@ def _schedule(page: _Page, x: float, top: float, bottom: float, played: list[dic
     d, t = page.draw, page.t
     page.label(x, top + 30, "Schedule", 26)
     rows = [("played", g) for g in played] + [("next", g) for g in to_play]
-    # Rows take the room there is, from 74px up to 100px each.
-    row_h = max(74.0, min(112.0, (bottom - top - 110) / max(1, len(rows))))
+    # Rows take the room there is, from 74px up to 124px each.
+    row_h = max(74.0, min(124.0, (bottom - top - 110) / max(1, len(rows))))
     y = top + 50
     fits = max(0, int((bottom - y - 60) // row_h))
     for kind, g in rows[:fits]:
@@ -238,7 +239,7 @@ def _ladder(page: _Page, top: float, rounds: list[dict], road: list[dict]) -> fl
         d.rounded_rectangle((x, y0, x + w, y0 + h), radius=16, fill=t.card, outline=t.edge, width=2 if t.edge else 0)
         cx, inner = x + 22, w - 44
         name = "Champion" if r["round"] == "Champions" else r["round"]
-        page.label(cx, y0 + 44, fit(d, name.upper(), _inter(20, 600), inner), 20)
+        page.label(cx, y0 + 44, fit(d, name.upper(), _nippo(20), inner), 20)
         if r["round"] == "Champions" and champion:
             cup = trophy(round(h - 96))
             page.img.paste(cup, (round(x + (w - cup.width) / 2), round(y0 + 70)), cup)
@@ -315,11 +316,10 @@ def _title(page: _Page, school: str, sub: str, mode: str) -> float:
     size = 150
     page.mark(school, PAD, PAD + 70, size)
     x = PAD + size + 36
-    page.label(SIZE[0] - PAD, PAD + 40, f"{MODE_LABELS[mode]} odds", 26, anchor="rs")
     font = _nippo(124)
     d.text((x, PAD + 104), fit(d, school, font, SIZE[0] - PAD - 340 - x), font=font, fill=t.text, anchor="ls")
-    d.text((x, PAD + 168), sub, font=_inter(40, 500), fill=t.text_2, anchor="ls")
-    return PAD + 168
+    d.text((x, PAD + 176), sub, font=_inter(40, 500), fill=t.text_2, anchor="ls")
+    return PAD + 176
 
 
 def render_team_season(
@@ -352,8 +352,10 @@ def render_team_season(
     top = _odds_row(page, top, team, mode)
     ladder_top = bottom - LADDER_H - 20
     played, to_play = team_games(school, games)
-    _schedule(page, PAD, top + 20, ladder_top - 30, played, to_play)
-    _strip(page, PAD + COL_W + COL_GAP, top + 20, ladder_top - 30, payload, school, mode)
+    ends = _schedule(page, PAD, top + 20, ladder_top - 30, played, to_play)
+    ends = max(ends, _strip(page, PAD + COL_W + COL_GAP, top + 20, ladder_top - 30, payload, school, mode))
+    # The playoffs follow the columns at the gap between sections, rather than at the foot of the page.
+    ladder_top = min(ladder_top, ends + 70)
     in_running = not (team.get("eliminated") and not team.get("clinched"))
     rounds = playoff_rounds(team, mode, clazz) if in_running else []
     if rounds:
@@ -399,7 +401,7 @@ def _outcome_card(page: _Page, x: float, y: float, card: dict, draw: bool) -> fl
     left = x + CARD_PAD
     h = CARD_PAD + 8
     pill_w = 136 if card.get("p") is not None and not card.get("continued") else 0
-    font = _inter(36, 700)
+    font = _nippo(36)
     title = f"{card['title']} IF" + (" (continued)" if card.get("continued") else "")
     lines = _wrap(d, title, font, inner - (pill_w + 20 if pill_w else 0))
     if draw:
@@ -414,7 +416,7 @@ def _outcome_card(page: _Page, x: float, y: float, card: dict, draw: bool) -> fl
         if draw:
             d.text(
                 (left, y + h + 34),
-                f"OR {n} more {'way' if n == 1 else 'ways'}: on the region page",
+                f"OR {n} more {'way' if n == 1 else 'ways'}: at the address below",
                 font=_inter(28, 600),
                 fill=t.text_2,
                 anchor="ls",
@@ -503,7 +505,7 @@ def render_team_scenarios(
         """A page's title, standings and intro; returns where its cards go, top and bottom."""
         top = _title(page, school, sub, mode)
         if total > 1:
-            page.label(SIZE[0] - PAD, PAD + 84, f"{n} of {total}", 26, anchor="rs")
+            page.label(SIZE[0] - PAD, PAD + 40, f"{n} of {total}", 26, anchor="rs")
         bx = PAD + 186
         for kind, label in _badges(team, clazz, False):
             bx += page.badge(bx, top + 44, kind, label, 26) + 12
@@ -511,7 +513,7 @@ def render_team_scenarios(
         for line in _wrap(page.draw, intro, _inter(32, 500), SIZE[0] - 2 * PAD) if intro else []:
             top += 44
             page.draw.text((PAD, top + 20), line, font=_inter(32, 500), fill=page.t.text_2, anchor="ls")
-        return top + (76 if intro else 36), _footer(page, stamp) - 20
+        return top + (76 if intro else 36), _footer(page, stamp) - 20 - LINK_H
 
     scratch = _Page.new(theme, teams)
     top, bottom = frame(scratch, 1, 2)
@@ -541,14 +543,17 @@ def render_team_scenarios(
         frame(page, n, len(shown))
         for card, x, y, h in items:
             _boxed(page, x, y, h, lambda c=card, x=x, y=y: _outcome_card(page, x, y, c, True))
+        # Where the rest is, once per page rather than in each card: the region page with the team picked.
         if n == len(shown) and cut:
-            rest = f"+{more} more {'outcome' if more == 1 else 'outcomes'}" if more else "The rest"
-            page.draw.text(
-                (PAD, bottom + 10),
-                f"{rest} at {SITE_HOST}{region_path(clazz, region)}?team={slugify(school)}",
-                font=_inter(34, 600),
-                fill=page.t.text,
-                anchor="ls",
-            )
+            lead = f"+{more} more {'outcome' if more == 1 else 'outcomes'}, and every way" if more else "The rest"
+        else:
+            lead = "Every way, and why"
+        page.draw.text(
+            (PAD, bottom + LINK_H + 10),
+            f"{lead}: {SITE_HOST}{region_path(clazz, region)}?team={slugify(school)}",
+            font=_inter(32, 600),
+            fill=page.t.text,
+            anchor="ls",
+        )
         images.append(page.img)
     return images

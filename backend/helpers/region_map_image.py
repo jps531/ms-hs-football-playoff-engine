@@ -18,12 +18,12 @@ from __future__ import annotations
 
 import math
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from backend.helpers import region_map
 from backend.helpers.data_helpers import SCHOOL_SUCCESSORS
 from backend.helpers.marks import THEMES, Theme, helmet, initials, team_colors
-from backend.helpers.share_cards import SITE_HOST, _inter, _nippo, _tracked, fit
+from backend.helpers.share_cards import _inter, _nippo, _tracked, brand_lockup, fit, smooth_draw
 
 SIZE = (2160, 2700)  # 1080x1350 at 2x
 PAD = 104
@@ -159,7 +159,7 @@ class _Page:
         self.t: Theme = THEMES[theme]
         self.size = size
         self.img = Image.new("RGB", size, self.t.bg)
-        self.d = ImageDraw.Draw(self.img)
+        self.d = smooth_draw(self.img)
         self.teams = teams
 
     def mark(self, school: str, x: float, mid: float, size: int) -> None:
@@ -175,8 +175,7 @@ class _Page:
 
     def footer(self) -> None:
         """The site's address along the bottom."""
-        base = self.size[1] - PAD + 8
-        self.d.text((self.size[0] - PAD, base), SITE_HOST, font=_inter(44, 600), fill=self.t.text, anchor="rs")
+        brand_lockup(self.img, self.theme, self.size[0] - PAD, self.size[1] - PAD + 8, 40)
 
     def label(self, x: float, base: float, text: str, anchor: str = "ls") -> None:
         """A small letter-spaced heading ("NEW REGION MEMBERS")."""
@@ -223,27 +222,27 @@ class _Page:
         for geom, color in fills:
             for poly in _polygons(geom):
                 mask = Image.new("L", size, 0)
-                md = ImageDraw.Draw(mask)
+                md = smooth_draw(mask)
                 md.polygon(ring(poly.exterior.coords), fill=fill_alpha)
                 for hole in poly.interiors:
                     md.polygon(ring(hole.coords), fill=0)
                 layer = Image.new("RGBA", size, color)
                 layer.putalpha(mask)
                 over = Image.alpha_composite(over, layer)
-                od = ImageDraw.Draw(over)
+                od = smooth_draw(over)
                 for edge in [poly.exterior, *poly.interiors]:
                     od.line(ring(edge.coords), fill=color + "C0", width=line, joint="curve")
         # County lines in the text color, see-through, so they show the same over the land and over every
         # region's color (as on the page: .map-county).
         lines = Image.new("RGBA", size, (0, 0, 0, 0))
-        ld = ImageDraw.Draw(lines)
+        ld = smooth_draw(lines)
         for geom in region_map.counties().values():
             for poly in _polygons(geom):
                 ld.line(ring(poly.exterior.coords), fill=t.text + "40", width=max(1, line - 1), joint="curve")
         over = Image.alpha_composite(over, lines)
         under = self.img.crop(box).convert("RGBA")
         self.img.paste(Image.alpha_composite(under, over).convert("RGB"), box[:2])
-        self.d = ImageDraw.Draw(self.img)
+        self.d = smooth_draw(self.img)
         for poly in _polygons(region_map.state()):
             self.d.line(frame.ring(poly.exterior.coords), fill=_blend(t.bg, t.text, 0.6), width=line + 2, joint="curve")
         for geom, color, width in outlines:  # (a county's border, over the regions and under the dots)
@@ -707,7 +706,7 @@ def render_class_regions_card(clazz: int, seasons: list[int], schools: list[dict
         [(shapes[g], region_color("dark", g)) for g in regions],
         [(s["x"], s["y"], region_color("dark", s["region"]), "", 14) for s in rows],
     )
-    page.d.text((CARD_PAD, CARD[1] - CARD_PAD + 16), SITE_HOST, font=_inter(52, 600), fill=t.text, anchor="ls")
+    brand_lockup(page.img, "dark", CARD_PAD, CARD[1] - CARD_PAD + 16, 44, align="left")
     return _card(page)
 
 
@@ -741,5 +740,5 @@ def render_team_region_card(
         _card_lines(page, CARD_PAD, y + 20, "New Region Members: " + ", ".join(new), 44, width, 3)
     rows = [s for s in _class_rows(schools, me["class"]) if s["x"] is not None]
     _region_map(page, _card_map(page), rows, school, 0, 16, 8)
-    page.d.text((CARD_PAD, CARD[1] - CARD_PAD + 16), SITE_HOST, font=_inter(52, 600), fill=t.text, anchor="ls")
+    brand_lockup(page.img, "dark", CARD_PAD, CARD[1] - CARD_PAD + 16, 44, align="left")
     return _card(page)

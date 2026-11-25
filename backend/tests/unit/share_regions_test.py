@@ -5,7 +5,7 @@ import json
 from datetime import date
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 import backend.prefect.share_regions as sr
 from backend.helpers.region_pages import season_options
@@ -132,18 +132,18 @@ def test_a_former_region_mate_in_another_class_is_shown_where_it_went(written):
     *_, jobs = written
     job = next(j for j in jobs if j.path == "regions/2027/team/greenwood-light.png")
     drawn = []
-    original = ri.ImageDraw.ImageDraw.text
+    original = ImageDraw.ImageDraw.text
 
     def text(self, xy, words, *args, **kwargs):
         """Keep what's written."""
         drawn.append(words)
         return original(self, xy, words, *args, **kwargs)
 
-    ri.ImageDraw.ImageDraw.text = text
+    ImageDraw.ImageDraw.text = text
     try:
         ri.render_team_region(**job.kwargs)
     finally:
-        ri.ImageDraw.ImageDraw.text = original
+        ImageDraw.ImageDraw.text = original
     assert "3-4A" in drawn and not any("Not on the" in w for w in drawn)
 
 

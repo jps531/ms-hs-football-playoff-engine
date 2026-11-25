@@ -3,7 +3,7 @@
 import json
 from datetime import date
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 from backend.helpers.share_cards import (
     HEIGHT,
@@ -709,3 +709,47 @@ def test_a_past_seasons_bracket_says_who_won_it():
     assert past_bracket_description(3, 2025, {}) == "The 2025 Class 3A playoff bracket."
     assert bracket_title(3, 2025) == "2025 Class 3A playoff bracket — Mississippi High School Football"
     assert bracket_title(3) == "Class 3A playoff bracket — Mississippi High School Football"
+
+
+def test_the_footer_says_which_odds_in_full():
+    """A stamp's mode reads as the odds it is; one without odds is left as it is."""
+    from backend.helpers.share_cards import stamp_line
+
+    assert stamp_line("Through Week 8 · Oct 16 · Projected") == "Through Week 8 · Oct 16 · Projected odds"
+    assert stamp_line("2026 season · Through Week 8 · Toss-up") == "2026 season · Through Week 8 · Toss-up odds"
+    assert stamp_line("2025 season · Final") == "2025 season · Final"
+
+
+def test_letter_spacing_keeps_the_fonts_kerning():
+    """A letter-spaced label is as wide as the line itself (its pairs kerned) plus the spacing between letters."""
+    from backend.helpers.share_cards import _tracked_width, smooth_draw
+
+    draw = smooth_draw(Image.new("RGB", (10, 10)))
+    font = _inter(30, 600)
+    assert _tracked_width(draw, "QUARTERFINALS", font, 2) == draw.textlength("QUARTERFINALS", font=font) + 2 * 12
+
+
+def test_text_is_measured_as_it_is_drawn():
+    """Drawn at four times its size and scaled down, text measures the font's own width, near what Pillow
+    measures at size; and it lands where it's put."""
+    from backend.helpers.share_cards import smooth_draw
+
+    img = Image.new("RGB", (400, 60), "white")
+    draw = smooth_draw(img)
+    font = _inter(30, 600)
+    assert abs(draw.textlength("Kosciusko", font=font) - ImageDraw.Draw(img).textlength("Kosciusko", font=font)) < 3
+    draw.text((20, 40), "Kosciusko", font=font, fill="#000000", anchor="ls")
+    left, top, right, bottom = img.convert("L").point(lambda v: 255 - v).getbbox()
+    assert 19 <= left <= 23 and 140 <= right - left <= 160 and bottom <= 41
+
+
+def test_every_card_ends_in_the_sites_footer():
+    """The footer's lockup sits along the bottom, the content above where it says the footer starts."""
+    from backend.helpers.share_cards import brand_footer
+
+    img = Image.new("RGB", (WIDTH, HEIGHT), "#161616")
+    top = brand_footer(img, "dark", 52, "Through Week 8 · Oct 16 · Projected", 21, 19, "#A4A3A4")
+    assert HEIGHT - 120 < top < HEIGHT - 60
+    drawn = ImageChops.difference(img, Image.new("RGB", img.size, "#161616"))
+    assert drawn.crop((0, 0, WIDTH, round(top))).getbbox() is None  # nothing drawn above it
+    assert drawn.crop((WIDTH // 2, round(top), WIDTH, HEIGHT)).getbbox() is not None  # the lockup, at the right

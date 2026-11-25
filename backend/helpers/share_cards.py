@@ -42,6 +42,10 @@ FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
 # so the file isn't committed (backend/assets/fonts/README.md says where it comes from).
 NIPPO = FONT_DIR / "Nippo-Bold.otf"
 INTER = FONT_DIR / "inter-latin-wght-normal.woff2"
+# The site's helmet (nginx/html/static/helmet.webp, the front page's), for the footer's lockup.
+HELMET_ART = FONT_DIR.parent / "helmet.webp"
+# The URL in the footer's lockup: the site's link green in each theme (--brand-400 dark, --brand-600 light).
+BRAND_GREEN = {"dark": "#66DDB5", "light": "#198C65"}
 
 _log = logging.getLogger(__name__)
 
@@ -250,11 +254,18 @@ def team_bracket_card_alt(team: str, clazz: int) -> str:
 # ----------------------------------------------------------------- drawing
 
 
+# How much larger text is drawn before it's scaled down to size (SmoothDraw).
+_SUPERSAMPLE = 4
+# Each font _inter and _nippo make, by id: how to make it again at another size.
+_REMAKE: dict[int, tuple] = {}
+
+
 @cache
 def _inter(size: int, weight: int) -> ImageFont.FreeTypeFont:
     """Inter at *size* px and a weight from its variable axis (400 regular, 600 semibold)."""
     font = ImageFont.truetype(str(INTER), size)
     font.set_variation_by_axes([weight])
+    _REMAKE[id(font)] = (_inter, size, (weight,))
     return font
 
 
@@ -262,9 +273,59 @@ def _inter(size: int, weight: int) -> ImageFont.FreeTypeFont:
 def _nippo(size: int) -> ImageFont.FreeTypeFont:
     """Nippo Bold at *size* px, for titles; Inter Bold when the Nippo file isn't installed (tests, CI)."""
     if NIPPO.exists():
-        return ImageFont.truetype(str(NIPPO), size)
+        font = ImageFont.truetype(str(NIPPO), size)
+        _REMAKE[id(font)] = (_nippo, size, ())
+        return font
     _log.warning("%s not found: drawing titles in Inter Bold (see backend/assets/fonts/README.md)", NIPPO)
     return _inter(size, 700)
+
+
+def _larger(font) -> ImageFont.FreeTypeFont | None:
+    """*font* at _SUPERSAMPLE times its size, when it's one of ours."""
+    made = _REMAKE.get(id(font))
+    return made[0](made[1] * _SUPERSAMPLE, *made[2]) if made else None
+
+
+_PLAIN = ImageDraw.Draw
+
+
+class SmoothDraw(ImageDraw.ImageDraw):
+    """ImageDraw whose text is drawn at _SUPERSAMPLE times its size and scaled down into place.
+
+    Drawn at size, FreeType fits each letter to the pixel grid and Pillow puts each one on a whole
+    pixel, so at the sizes these images use the gaps between letters come out uneven ("Kosci usko").
+    Drawn larger, the letters sit within a quarter of a pixel of where the font puts them. Text is
+    measured the same way, so what's laid out is what's drawn."""
+
+    def __init__(self, img: Image.Image):
+        super().__init__(img)
+        self._img = img
+
+    def textlength(self, text, font=None, *args, **kwargs):
+        big = _larger(font)
+        if big is None or args or kwargs:
+            return super().textlength(text, font, *args, **kwargs)
+        return super().textlength(text, big) / _SUPERSAMPLE
+
+    def text(self, xy, text, fill=None, font=None, anchor=None, *args, **kwargs):
+        big = _larger(font)
+        if big is None or fill is None or args or kwargs or not text or "\n" in text:
+            return super().text(xy, text, fill, font, anchor, *args, **kwargs)
+        k = _SUPERSAMPLE
+        x, y = xy[0] * k, xy[1] * k
+        left, top, right, bottom = big.getbbox(text, anchor=anchor)
+        ox, oy = math.floor((x + left) / k) * k, math.floor((y + top) / k) * k
+        w = math.ceil((x + right - ox) / k + 1) * k
+        h = math.ceil((y + bottom - oy) / k + 1) * k
+        mask = Image.new("L", (w, h), 0)
+        _PLAIN(mask).text((x - ox, y - oy), text, fill=255, font=big, anchor=anchor)
+        mask = mask.resize((w // k, h // k), Image.BOX)
+        self._img.paste(fill, (ox // k, oy // k, ox // k + w // k, oy // k + h // k), mask)
+
+
+def smooth_draw(img: Image.Image) -> SmoothDraw:
+    """A SmoothDraw on *img*."""
+    return SmoothDraw(img)
 
 
 def fit(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, width: float) -> str:
@@ -295,18 +356,131 @@ def wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont, wid
 
 def _tracked_width(draw: ImageDraw.ImageDraw, text: str, font, tracking: float) -> float:
     """Width of *text* drawn by ``_tracked``."""
-    return sum(draw.textlength(ch, font=font) for ch in text) + tracking * max(0, len(text) - 1)
+    return draw.textlength(text, font=font) + tracking * max(0, len(text) - 1)
 
 
 def _tracked(draw: ImageDraw.ImageDraw, xy: tuple[float, float], text: str, font, fill, tracking: float, anchor="ls"):
-    """Small caps-style label with letter spacing (Pillow has none built in). Left or right anchored."""
+    """Small caps-style label with letter spacing (Pillow has none built in). Left or right anchored.
+
+    Each letter goes where the whole line would put it (its kerning with the letters before it kept),
+    then *tracking* further along for each letter before it: drawn one at a time, the pairs the font
+    kerns ("AV", "TA") would otherwise sit too far apart."""
     total = _tracked_width(draw, text, font, tracking)
     x, y = xy
     if anchor[0] == "r":
         x -= total
-    for ch in text:
-        draw.text((x, y), ch, font=font, fill=fill, anchor="l" + anchor[1])
-        x += draw.textlength(ch, font=font) + tracking
+    for i, ch in enumerate(text):
+        if not ch.isspace():
+            at = x + draw.textlength(text[:i], font=font) + tracking * i
+            draw.text((at, y), ch, font=font, fill=fill, anchor="l" + anchor[1])
+
+
+@cache
+def _helmet_art(height: int) -> Image.Image:
+    """The site's helmet, *height* px tall."""
+    art = Image.open(HELMET_ART).convert("RGBA")
+    art = art.crop(art.getbbox())
+    return art.resize((round(art.width * height / art.height), height), Image.LANCZOS)
+
+
+def stamp_line(stamp: str) -> str:
+    """A footer's provenance, its odds mode said in full: "… · Projected" → "… · Projected odds"."""
+    for mode in ("Projected", "Toss-up"):
+        if stamp.endswith(f" · {mode}") or stamp == mode:
+            return f"{stamp} odds"
+    return stamp
+
+
+def theme_name(t) -> str:
+    """ "dark" or "light": which of marks.THEMES *t* is."""
+    return "dark" if t.text == TEXT else "light"
+
+
+def brand_lockup(
+    img: Image.Image, theme: str, edge: float, base: float, size: int, align: str = "right"
+) -> tuple[float, float]:
+    """The site's helmet, name and address, its right side at *edge* (or with *align* "left", its left
+    side), the address's baseline at *base*; *size* is the name's font size. Returns the lockup's left
+    edge and its top."""
+    draw = smooth_draw(img)
+    name_font, host_font = _nippo(size), _nippo(round(size * 0.8))
+    name_base = base - round(size * 1.08)
+    width = max(draw.textlength(SITE_NAME, font=name_font), draw.textlength(SITE_HOST, font=host_font))
+    top = name_base - round(size * 0.78)  # the name's cap height
+    art = _helmet_art(round((base - top) * 1.12))
+    gap = round(size * 0.45)
+    x = edge - width if align == "right" else edge + art.width + gap
+    left = x - gap - art.width
+    img.paste(art, (round(left), round((top + base) / 2 - art.height / 2)), art)
+    text = TEXT if theme == "dark" else "#272727"
+    draw.text((x, name_base), SITE_NAME, font=name_font, fill=text, anchor="ls")
+    draw.text((x, base), SITE_HOST, font=host_font, fill=BRAND_GREEN[theme], anchor="ls")
+    return left, top
+
+
+def brand_footer(img: Image.Image, theme: str, pad: float, stamp: str, size: int, stamp_size: int, color: str) -> float:
+    """The footer along the bottom of *img*: the provenance *stamp* (if any) at the left in Nippo
+    capitals, the site's lockup at the right (``brand_lockup``, its name at *size*). Returns the top of
+    the footer: where what's above it must end."""
+    w, h = img.size
+    base = h - pad
+    left, top = brand_lockup(img, theme, w - pad, base, size)
+    if stamp:
+        draw = smooth_draw(img)
+        text = stamp_line(stamp).upper()
+        tracking = stamp_size * 0.08
+        font = _nippo(stamp_size)
+        while _tracked_width(draw, text, font, tracking) > left - pad - size and font.size > 10:
+            font = _nippo(font.size - 1)
+        _tracked(draw, (pad, (top + base) / 2), text, font, color, tracking, anchor="lm")
+    return top - round(size * 0.9)
+
+
+def _breadcrumb(draw: ImageDraw.ImageDraw, x: float, base: float, parts: list[str], size: int) -> None:
+    """A trail like the site's breadcrumb ("Class 4A › Region 3-4A"), in Nippo: the places above in the
+    link green, the last one plain."""
+    font = _nippo(size)
+    for i, part in enumerate(parts):
+        if i:
+            draw.text((x, base), " › ", font=font, fill=TEXT_2, anchor="ls")
+            x += draw.textlength(" › ", font=font)
+        draw.text((x, base), part, font=font, fill=TEXT_2 if i == len(parts) - 1 else BRAND_GREEN["dark"], anchor="ls")
+        x += draw.textlength(part, font=font)
+
+
+def _school_title(img: Image.Image, draw, base: float, school: str, font, look: dict | None) -> None:
+    """A card's school name at *base* in *font*, its helmet (from *look*, its ``/teams`` entry) before it
+    when it has colors."""
+    from backend.helpers.marks import helmet, team_colors  # marks imports this module
+
+    x = PAD
+    colors = team_colors(look)
+    if colors:
+        size = round(font.size * 0.95)
+        icon = helmet(colors[0], colors[1], size, "#FFFFFF")
+        img.paste(icon, (x, round(base - font.size * 0.74 / 2 - size / 2)), icon)
+        x += size + round(font.size * 0.25)
+    draw.text((x, base), fit(draw, school, font, WIDTH - PAD - x), font=font, fill=TEXT, anchor="ls")
+
+
+def _lock(draw: ImageDraw.ImageDraw, x: float, mid: float, h: float, color: str) -> float:
+    """A padlock *h* px tall, its left at *x*, centered on *mid*; returns its width."""
+    w = h * 0.78
+    body_top = mid - h / 2 + h * 0.42
+    shackle = (x + w * 0.2, mid - h / 2, x + w * 0.8, body_top + h * 0.3)
+    draw.arc(shackle, 180, 360, fill=color, width=max(2, round(h * 0.12)))
+    draw.line(
+        (shackle[0] + h * 0.06, body_top - h * 0.12, shackle[0] + h * 0.06, body_top),
+        fill=color,
+        width=max(2, round(h * 0.12)),
+    )
+    draw.line(
+        (shackle[2] - h * 0.06, body_top - h * 0.12, shackle[2] - h * 0.06, body_top),
+        fill=color,
+        width=max(2, round(h * 0.12)),
+    )
+    draw.rounded_rectangle((x, body_top, x + w, mid + h / 2), radius=h * 0.1, fill=color)
+    return w
 
 
 def _odds_pill(
@@ -324,15 +498,14 @@ def _odds_pill(
     draw.text((right - 12, middle), format_pct(p), font=_inter(size, 600), fill=ODDS_TEXT, anchor="rm")
 
 
-def _footer(draw: ImageDraw.ImageDraw, stamp: str) -> None:
-    """Provenance stamp (left) and the site's address (right), along the bottom."""
-    base = HEIGHT - PAD + 8
-    _tracked(draw, (PAD, base), stamp.upper(), _inter(19, 600), TEXT_2, 1.6)
-    draw.text((WIDTH - PAD, base), SITE_HOST, font=_inter(24, 600), fill=TEXT, anchor="rs")
+def _footer(img: Image.Image, stamp: str) -> float:
+    """Provenance stamp (left) and the site's lockup (right), along the bottom of a dark card."""
+    return brand_footer(img, "dark", PAD - 12, stamp, CARD_LOCKUP, 19, TEXT_2)
 
 
-# Bottom of the area a table may use: the footer sits below it.
-_TABLE_BOTTOM = HEIGHT - PAD - 34
+# The site's name in a link preview's footer, and the bottom of the area a table may use above it.
+CARD_LOCKUP = 21
+_TABLE_BOTTOM = HEIGHT - PAD - 48
 
 
 def _table(
@@ -356,11 +529,11 @@ def _table(
         rights.insert(0, edge)
         edge -= w + gap
     record_right = edge + gap - 32
-    small = _inter(17, 600)
+    small = _nippo(17)
     _tracked(draw, (record_right, top), record_header, small, TEXT_2, 1.6, anchor="rs")
     header_font, tracking = small, 1.6
     if any(_tracked_width(draw, h, small, 1.6) > w + gap - 6 for h, w in zip(odds_headers, widths, strict=True)):
-        header_font, tracking = _inter(15, 600), 0.8
+        header_font, tracking = _nippo(15), 0.8
     for col_right, header in zip(rights, odds_headers, strict=True):
         _tracked(draw, (col_right, top), header, header_font, TEXT_2, tracking, anchor="rs")
     pill_h = min(44, row_h - 10)
@@ -454,9 +627,9 @@ def render_region_card(clazz: int, region: int, payload: dict, stamp: str, mode:
     *payload* is the API's region standings response (``/standings/{class}/{region}``).
     """
     img = Image.new("RGB", (WIDTH, HEIGHT), BG)
-    draw = ImageDraw.Draw(img)
+    draw = smooth_draw(img)
     draw.text((PAD, PAD + 58), f"Region {region}-{clazz}A", font=_nippo(76), fill=TEXT, anchor="ls")
-    y = PAD + 58
+    y = PAD + 58 + 12  # clear of the title's descenders ("Region")
     headline = payload.get("headline")
     lines = wrap(draw, headline, _inter(32, 600), WIDTH - 2 * PAD, 3) if headline else []
     for line in lines:
@@ -489,7 +662,7 @@ def render_region_card(clazz: int, region: int, payload: dict, stamp: str, mode:
         [88, 88, 88, 88, 116],
         gap=8,
     )
-    _footer(draw, stamp)
+    _footer(img, stamp)
     return img
 
 
@@ -499,13 +672,13 @@ def render_class_card(clazz: int, payload: dict, stamp: str, mode: str) -> Image
     *payload* is the API's class standings response (``/standings/{class}``).
     """
     img = Image.new("RGB", (WIDTH, HEIGHT), BG)
-    draw = ImageDraw.Draw(img)
+    draw = smooth_draw(img)
     draw.text((PAD, PAD + 58), f"Class {clazz}A", font=_nippo(76), fill=TEXT, anchor="ls")
     regions = sorted(payload.get("regions") or [], key=lambda r: r["region"])
     leaders = [(r["region"], display_order(r["teams"])[0]) for r in regions if r.get("teams")]
     y = PAD + 58
     if len(leaders) <= 4:
-        draw.text((PAD, y + 50), "Who’s on top in every region race", font=_inter(34, 600), fill=TEXT_2, anchor="ls")
+        draw.text((PAD, y + 50), "Region leaders", font=_inter(34, 600), fill=TEXT_2, anchor="ls")
         y += 50
     rows = [
         (
@@ -520,15 +693,15 @@ def render_class_card(clazz: int, payload: dict, stamp: str, mode: str) -> Image
         _class_table(draw, y + 40, rows)  # eight regions: two columns of four
     else:
         _table(draw, y + 46, [(*r[:3], [r[3]]) for r in rows], "REGION", ["WINS REGION"], PAD + 56)
-    _footer(draw, stamp)
+    _footer(img, stamp)
     return img
 
 
 def _class_table(draw, top: float, rows: list[tuple[str, str, str, float]]) -> None:
     """Eight region leaders in two columns of four."""
-    small = _inter(17, 600)
+    small = _nippo(17)
     col_w = (WIDTH - 2 * PAD - 48) / 2
-    _tracked(draw, (PAD, top), "WHO’S ON TOP", small, TEXT_2, 1.6)
+    _tracked(draw, (PAD, top), "REGION LEADERS", small, TEXT_2, 1.6)
     _tracked(draw, (PAD + col_w, top), "WINS REGION", small, TEXT_2, 1.6, anchor="rs")
     _tracked(draw, (WIDTH - PAD, top), "WINS REGION", small, TEXT_2, 1.6, anchor="rs")
     row_h = 74
@@ -555,6 +728,7 @@ def _class_table(draw, top: float, rows: list[tuple[str, str, str, float]]) -> N
 
 # ------------------------------------------------------------------ teams
 
+LOSS = "#F87171"  # a loss's "L" on a dark card: red-400, which reads on it (the site's #B91C1C doesn't)
 CLINCHED = "#66DDB5"  # --brand-400, the clinched badge's color in the dark theme
 
 _ROUND_TITLES = {
@@ -687,7 +861,7 @@ def _pill_row(draw: ImageDraw.ImageDraw, top: float, label: str, cells: list[tup
 
     *top* is the title's baseline; the row ends about 95px below it.
     """
-    small = _inter(17, 600)
+    small = _nippo(17)
     draw.text((PAD, top), label, font=_nippo(30), fill=TEXT, anchor="ls")
     gap = 14
     width = (WIDTH - 2 * PAD - gap * (len(cells) - 1)) / len(cells)
@@ -695,7 +869,7 @@ def _pill_row(draw: ImageDraw.ImageDraw, top: float, label: str, cells: list[tup
     # headers down a size rather than abbreviate them.
     header_font, tracking = small, 1.6
     if max(_tracked_width(draw, h, small, 1.6) for h, _ in cells) > width - 16:
-        header_font, tracking = _inter(15, 600), 0.8
+        header_font, tracking = _nippo(15), 0.8
     for i, (header, p) in enumerate(cells):
         right = PAD + (i + 1) * width + i * gap
         _tracked(draw, (right, top + 34), header, header_font, TEXT_2, tracking, anchor="rs")
@@ -704,22 +878,22 @@ def _pill_row(draw: ImageDraw.ImageDraw, top: float, label: str, cells: list[tup
         _odds_pill(draw, right, top + 34 + 36, p, width, 50, 30)
 
 
-def render_team_card(clazz: int, region: int, team: dict, stamp: str, mode: str) -> Image.Image:
-    """A team's card: name, records and status, seeding odds, and its odds of reaching each playoff round.
+def render_team_card(
+    clazz: int, region: int, team: dict, stamp: str, mode: str, look: dict | None = None
+) -> Image.Image:
+    """A team's card: name (and helmet, from *look*, its ``/teams`` entry), records and status, seeding odds,
+    and its odds of reaching each playoff round.
 
     *team* is one entry of the API's region standings response.
     """
     img = Image.new("RGB", (WIDTH, HEIGHT), BG)
-    draw = ImageDraw.Draw(img)
-    _tracked(draw, (PAD, PAD + 18), f"REGION {region}-{clazz}A", _inter(20, 600), TEXT_2, 2)
-    name_font = _nippo(80)
-    draw.text(
-        (PAD, PAD + 104), fit(draw, team["school"], name_font, WIDTH - 2 * PAD), font=name_font, fill=TEXT, anchor="ls"
-    )
+    draw = smooth_draw(img)
+    _breadcrumb(draw, PAD, PAD + 18, [f"Class {clazz}A", f"Region {region}-{clazz}A"], 22)
+    _school_title(img, draw, PAD + 104, team["school"], _nippo(76), look)
     overall, in_region = _records(team)
     line_font = _inter(30, 600)
     x = PAD
-    y = PAD + 154
+    y = PAD + 146
     for text, color in [(f"{overall} overall", TEXT), (" · ", TEXT_2), (f"{in_region} in region", TEXT)]:
         draw.text((x, y), text, font=line_font, fill=color, anchor="ls")
         x += draw.textlength(text, font=line_font)
@@ -732,7 +906,7 @@ def render_team_card(clazz: int, region: int, team: dict, stamp: str, mode: str)
         )
     _pill_row(
         draw,
-        PAD + 220,
+        PAD + 206,
         "Seeding odds",
         [
             (h, mode_odds(team, k, mode))
@@ -743,8 +917,8 @@ def render_team_card(clazz: int, region: int, team: dict, stamp: str, mode: str)
     )
     path = playoff_path(team, mode, clazz)
     if path:
-        _pill_row(draw, PAD + 366, "Chance of reaching each round", [(label, p) for _, label, p in path])
-    _footer(draw, stamp)
+        _pill_row(draw, PAD + 340, "Chance of reaching each round", [(label, p) for _, label, p in path])
+    _footer(img, stamp)
     return img
 
 
@@ -977,7 +1151,7 @@ def render_bracket_card(
     *regions* maps each school to its region, for the sub-label.
     """
     img = Image.new("RGB", (WIDTH, HEIGHT), BG)
-    draw = ImageDraw.Draw(img)
+    draw = smooth_draw(img)
     draw.text((PAD, PAD + 58), f"Class {clazz}A Bracket", font=_nippo(76), fill=TEXT, anchor="ls")
     champion = favorites[0] if favorites and _certain(_bracket_odds(favorites[0], "champion", "tossup")) else None
     line = f"{champion['school']} won the state championship" if champion else "Who’s likeliest to win it all"
@@ -1004,25 +1178,29 @@ def render_bracket_card(
         [176, 176, 176],
         gap=16,
     )
-    _footer(draw, stamp)
+    _footer(img, stamp)
     return img
 
 
 def render_team_bracket_card(
-    clazz: int, region: int | None, team: dict, road: list[dict], stamp: str, mode: str, venue: dict | None = None
+    clazz: int,
+    region: int | None,
+    team: dict,
+    road: list[dict],
+    stamp: str,
+    mode: str,
+    venue: dict | None = None,
+    look: dict | None = None,
 ) -> Image.Image:
     """A team's road through the bracket: each round played, its result; each round to come, its chance,
     likeliest opponent with the chance it's them if the team gets there, and who'd host, or for the
     championship game where it's played (*venue*, the API's ``/championships`` location, when it's on
     record)."""
     img = Image.new("RGB", (WIDTH, HEIGHT), BG)
-    draw = ImageDraw.Draw(img)
+    draw = smooth_draw(img)
     kicker = f"CLASS {clazz}A BRACKET" + (f" · REGION {region}-{clazz}A" if region else "")
-    _tracked(draw, (PAD, PAD + 14), kicker, _inter(19, 600), TEXT_2, 2)
-    name_font = _nippo(64)
-    draw.text(
-        (PAD, PAD + 84), fit(draw, team["school"], name_font, WIDTH - 2 * PAD), font=name_font, fill=TEXT, anchor="ls"
-    )
+    _tracked(draw, (PAD, PAD + 14), kicker, _nippo(19), TEXT_2, 2)
+    _school_title(img, draw, PAD + 84, team["school"], _nippo(64), look)
     status = team_status(team, clazz)
     champion = _bracket_odds(team, "champion", mode) if team.get("bracket_odds") else None
     parts = [(status[1], CLINCHED if status[0] != "eliminated" else TEXT_2)] if status else []
@@ -1037,7 +1215,7 @@ def render_team_bracket_card(
         draw.text((x, y), text, font=line_font, fill=color, anchor="ls")
         x += draw.textlength(text, font=line_font)
 
-    small = _inter(17, 600)
+    small = _nippo(17)
     top = PAD + 174
     right = WIDTH - PAD
     pill_w = 110
@@ -1075,7 +1253,7 @@ def render_team_bracket_card(
                 (reach_right - 12, middle),
                 "W" if won else "L",
                 font=_inter(30, 700),
-                fill=CLINCHED if won else TEXT_2,
+                fill=CLINCHED if won else LOSS,
                 anchor="rm",
             )
             opponent = played["opponent"]
@@ -1100,7 +1278,10 @@ def render_team_bracket_card(
             y += row_h
             continue
         if step.get("set"):
-            draw.text((reach_right - 12, middle), "Next", font=_inter(26, 700), fill=TEXT, anchor="rm")
+            # Set: both teams in it. A lock, as the bracket page marks a locked-in team.
+            font = _inter(26, 700)
+            draw.text((reach_right - 12, middle), "Next", font=font, fill=TEXT, anchor="rm")
+            _lock(draw, reach_right - 12 - draw.textlength("Next", font=font) - 30, middle, 24, CLINCHED)
         else:
             _odds_pill(draw, reach_right, middle, step["reach"], pill_w, pill_h, 26)
         if step["opponent"]:
@@ -1131,28 +1312,28 @@ def render_team_bracket_card(
             draw.text((opp_x, middle - 12), "Many possible opponents", font=_inter(24, 600), fill=TEXT_2, anchor="lm")
             draw.text((opp_x, middle + 17), "Each under 0.5%", font=_inter(19, 500), fill=TEXT_2, anchor="lm")
         y += row_h
-    _footer(draw, stamp)
+    _footer(img, stamp)
     return img
 
 
 def render_site_card() -> Image.Image:
-    """The fallback card for pages without their own: the site's name and what it does."""
+    """The fallback card for pages without their own, laid out like the front page's top: "Welcome to"
+    over the site's name in capitals and what it does, its helmet at the right, its address below."""
     img = Image.new("RGB", (WIDTH, HEIGHT), BG)
-    draw = ImageDraw.Draw(img)
-    lines = wrap(draw, SITE_NAME, _nippo(84), WIDTH - 2 * PAD, 2)
-    y = PAD + 60
-    for line in lines:
-        draw.text((PAD, y), line, font=_nippo(84), fill=TEXT, anchor="ls")
-        y += 92
-    for line in wrap(
-        draw,
-        SITE_DESCRIPTION,
-        _inter(36, 600),
-        WIDTH - 2 * PAD,
-        3,
-    ):
-        y += 12
-        draw.text((PAD, y), line, font=_inter(36, 600), fill=TEXT_2, anchor="ls")
-        y += 36
-    draw.text((WIDTH - PAD, HEIGHT - PAD + 8), SITE_HOST, font=_inter(24, 600), fill=TEXT, anchor="rs")
+    draw = smooth_draw(img)
+    art = _helmet_art(380)
+    img.paste(art, (WIDTH - PAD + 20 - art.width, (HEIGHT - art.height) // 2 - 10), art)
+    room = WIDTH - 2 * PAD - art.width + 10
+    _tracked(draw, (PAD, PAD + 30), "WELCOME TO", _nippo(24), TEXT, 1.5)
+    title = _nippo(64)
+    y = PAD + 100
+    for line in wrap(draw, SITE_NAME.upper(), title, room, 3):
+        draw.text((PAD, y), line, font=title, fill=TEXT, anchor="ls")
+        y += 68
+    body = _inter(27, 500)
+    y += 6
+    for line in wrap(draw, SITE_DESCRIPTION, body, room - 20, 3):
+        draw.text((PAD, y), line, font=body, fill=TEXT_2, anchor="ls")
+        y += 38
+    draw.text((PAD, HEIGHT - PAD + 8), SITE_HOST, font=_nippo(30), fill=BRAND_GREEN["dark"], anchor="ls")
     return img

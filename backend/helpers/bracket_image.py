@@ -20,18 +20,20 @@ from __future__ import annotations
 
 from functools import cache
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from backend.helpers.marks import THEMES, Theme, _curve, helmet  # noqa: F401 (re-exported: the images import them from here too)
 from backend.helpers.share_cards import (
-    SITE_HOST,
     _inter,
     _nippo,
     _tracked,
     _tracked_width,
+    brand_footer,
     fit,
     format_pct,
     odds_bucket,
+    smooth_draw,
+    theme_name,
 )
 from backend.helpers.static_pages import (
     HALF_NAMES,
@@ -72,7 +74,7 @@ def trophy(height: int) -> Image.Image:
     """The state championship trophy, *height* px tall (RGBA), drawn 4x and scaled down for smooth edges."""
     k = height * 4 / 56
     img = Image.new("RGBA", (round(40 * k), round(56 * k)), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+    draw = smooth_draw(img)
     pt = lambda p: (p[0] * k, p[1] * k)  # noqa: E731
 
     def rect(x, y, w, h, r, color):
@@ -185,7 +187,7 @@ class _Painter:
 
     def __init__(self, img: Image.Image, card_w: float, row_h: float, theme: Theme, teams: dict):
         self.img = img
-        self.draw = ImageDraw.Draw(img)
+        self.draw = smooth_draw(img)
         self.theme = theme
         self.teams = teams
         self.mark = round(row_h * 0.62)
@@ -208,16 +210,7 @@ class _Painter:
 
     def _mark(self, team: str, x: float, mid: float) -> None:
         """A team's helmet in its colors; its initials when it has no colors."""
-        t = self.theme
-        colors = team_colors(self.teams.get(team))
-        top = round(mid - self.mark / 2)
-        if colors:
-            icon = helmet(colors[0], colors[1], self.mark, t.pale_edge)
-            self.img.paste(icon, (round(x), top), icon)
-            return
-        self.draw.rounded_rectangle((x, top, x + self.mark, top + self.mark), radius=self.mark / 2, fill=t.rule)
-        font = _inter(round(self.mark * 0.4), 600)
-        self.draw.text((x + self.mark / 2, mid), initials(team), font=font, fill=t.text_2, anchor="mm")
+        _mark(self.img, self.draw, self.theme, self.teams, team, x, mid, self.mark)
 
     def _row(self, view: dict, x: float, top: float) -> None:
         """One side: its helmet and name (and seed or position under it), then its score or chance on the right."""
@@ -284,6 +277,19 @@ class _Painter:
         )
 
 
+def _mark(img: Image.Image, draw, t: Theme, teams: dict, team: str, x: float, mid: float, size: int) -> None:
+    """*team*'s helmet in its colors, *size* px, its left at *x* and centered on *mid*; its initials in a
+    circle when it has no colors."""
+    colors = team_colors(teams.get(team))
+    top = round(mid - size / 2)
+    if colors:
+        icon = helmet(colors[0], colors[1], size, t.pale_edge)
+        img.paste(icon, (round(x), top), icon)
+        return
+    draw.rounded_rectangle((x, top, x + size, top + size), radius=size / 2, fill=t.rule)
+    draw.text((x + size / 2, mid), initials(team), font=_inter(round(size * 0.4), 600), fill=t.text_2, anchor="mm")
+
+
 def _rows(game: dict, results: dict, seeds: dict, picks: dict, blank: bool) -> list[dict]:
     """Both sides of a game, top to bottom as the bracket page orders them (home team last)."""
     order, _ = _game_order(game, settled_host(game, MODE))
@@ -301,11 +307,7 @@ def _header(draw, t: Theme, pad: int, title: str, subtitle: str) -> float:
 
 def _footer(draw, t: Theme, size: tuple[int, int], pad: int, stamp: str) -> float:
     """The stamp and the site's address along the bottom; returns where the bracket must end."""
-    width, height = size
-    base = height - pad + 4
-    _tracked(draw, (pad, base), stamp.upper(), _inter(26, 600), t.text_2, 2)
-    draw.text((width - pad, base), SITE_HOST, font=_inter(34, 600), fill=t.text, anchor="rs")
-    return height - pad - 60
+    return brand_footer(draw._img, theme_name(t), pad - 8, stamp, 40, 30, t.text_2)
 
 
 def _label(draw, t: Theme, name: str, x: float, width: float, base: float, font) -> None:
@@ -314,12 +316,21 @@ def _label(draw, t: Theme, name: str, x: float, width: float, base: float, font)
     _tracked(draw, (x + (width - _tracked_width(draw, text, font, 1.5)) / 2, base), text, font, t.text_2, 1.5)
 
 
-def _subtitle(final: bool, blank: bool) -> str:
-    """What the image shows, where it needs saying: the Projected odds, which pick one team for each open
-    spot. A blank or finished bracket needs none (the footer has the season and "Final")."""
-    if final or blank:
+def _subtitle(final: bool, blank: bool, open_spots: bool) -> str:
+    """What the image shows, where it needs saying: that the Projected odds pick one team for each open
+    spot, when there's one. The footer says which odds; a blank or finished bracket needs nothing."""
+    if final or blank or not open_spots:
         return ""
-    return "Projected odds · Each open spot shows one team that could be there, and their chance"
+    return "Each open spot shows one team that could be there, and their chance"
+
+
+def has_open_spots(games: list[dict], results: dict, seeds: dict, view: str = "all") -> bool:
+    """Whether any spot in *view*'s games ("all", or a half: "N", "S") shows one team that could
+    be there rather than a team sure to be."""
+    picks = picks_for(games, results)
+    half = "" if view == "all" else view
+    shown = [g for g in games if not half or g["id"].startswith(f"{half}-")]
+    return any(r["kind"] == "pick" for g in shown for r in _rows(g, results, seeds, picks, False))
 
 
 # The trophy over a finished season's championship game, in px.
@@ -373,9 +384,9 @@ def render_bracket_image(
     size = WIDE if view == "all" else SQUARE
     pad = 72
     img = Image.new("RGB", size, t.bg)
-    draw = ImageDraw.Draw(img)
+    draw = smooth_draw(img)
     title = f"{season} Class {clazz}A Bracket" + ("" if view == "all" else f" · {HALF_NAMES.get(view, view)}")
-    top = _header(draw, t, pad, title, _subtitle(final, blank))
+    top = _header(draw, t, pad, title, _subtitle(final, blank, has_open_spots(games, results, seeds, view)))
     bottom = _footer(draw, t, size, pad, stamp)
     _body(img, t, pad, top, bottom, games, results, seeds, view, blank, teams, venue, projected_line=True)
     return img
@@ -399,7 +410,7 @@ def _body(
     """The bracket itself between *top* and *bottom*: round labels, cards, connectors, and under the
     championship game its venue and the champion (or, when *projected_line*, the projected one)."""
     size = img.size
-    draw = ImageDraw.Draw(img)
+    draw = smooth_draw(img)
     picks = {} if blank else picks_for(games, results)
     labels_h = 44
     body_top, body_h = top + labels_h, bottom - top - labels_h
@@ -416,7 +427,7 @@ def _body(
     first = max(len(r[0]) for r in rounds.values() if r)
     row_h = min(64.0, body_h / first * 0.4)
     paint = _Painter(img, card_w, row_h, t, teams or {})
-    label_font = _inter(24, 600)
+    label_font = _nippo(26)
 
     def column_x(h: str, k: int) -> float:
         """Left edge of round *k*'s column: the north half reads left to right, the south half (wide) right to left."""
@@ -508,14 +519,14 @@ def title_contenders(game: dict | None, result: dict | None, n: int = 2) -> list
 
 
 def _card_header(
-    draw, t: Theme, pad: int, title: str, subtitle: str, right: list[tuple[str, str]], label: str
+    draw, t: Theme, pad: int, title: str, subtitle: str, right: list[tuple[str, str]], label: str, teams: dict
 ) -> float:
     """The preview's title (and subtitle), with *label* over *right*'s rows (name, value) at the right;
     returns where the bracket may start."""
     width = CARD[0]
     right_w = 0.0
     if right:
-        name_font, value_font, label_font = _inter(64, 600), _inter(64, 500), _inter(34, 600)
+        name_font, value_font, label_font = _inter(64, 600), _inter(64, 500), _nippo(36)
         _tracked(
             draw, (width - pad - _tracked_width(draw, label, label_font, 2), pad + 30), label, label_font, t.text_2, 2
         )
@@ -527,7 +538,9 @@ def _card_header(
             name_w = draw.textlength(name, font=name_font)
             draw.text((width - pad, base), value_text, font=value_font, fill=t.text_2, anchor="rs")
             draw.text((width - pad - value_w, base), name, font=name_font, fill=t.text, anchor="rs")
-            right_w = max(right_w, name_w + value_w)
+            mark = 64
+            _mark(draw._img, draw, t, teams, name, width - pad - value_w - name_w - 18 - mark, base - 24, mark)
+            right_w = max(right_w, name_w + value_w + 18 + mark)
     title_font = _nippo(132)
     draw.text(
         (pad, pad + 104),
@@ -543,11 +556,7 @@ def _card_header(
 
 def _card_footer(draw, t: Theme, pad: int, stamp: str) -> float:
     """The stamp and the site's address, sized to read in a link preview; returns where the bracket must end."""
-    width, height = CARD
-    base = height - pad + 6
-    _tracked(draw, (pad, base), stamp.upper(), _inter(40, 600), t.text_2, 3)
-    draw.text((width - pad, base), SITE_HOST, font=_inter(52, 600), fill=t.text, anchor="rs")
-    return height - pad - 84
+    return brand_footer(draw._img, theme_name(t), pad - 12, stamp, 64, 56, t.text_2)
 
 
 def render_bracket_card_image(
@@ -569,7 +578,7 @@ def render_bracket_card_image(
     blank = blank or final
     pad = 72
     img = Image.new("RGB", CARD, t.bg)
-    draw = ImageDraw.Draw(img)
+    draw = smooth_draw(img)
     final_game = next((g for g in games if g["id"] == "final"), None)
     champion = (results.get("final") or {}).get("winner")
     if champion:
@@ -579,9 +588,7 @@ def render_bracket_card_image(
     else:
         right = [(c["team"], format_pct(c["p"])) for c in title_contenders(final_game, None)]
         label = "LIKELIEST TO WIN IT ALL"
-    top = _card_header(
-        draw, t, pad, f"{season} Class {clazz}A Bracket", "" if blank else "Projected odds", right, label
-    )
+    top = _card_header(draw, t, pad, f"{season} Class {clazz}A Bracket", "", right, label, teams or {})
     bottom = _card_footer(draw, t, pad, stamp)
     _body(img, t, pad, top, bottom, games, results, seeds, "all", blank, teams, venue, projected_line=False)
     return img.resize((CARD[0] // CARD_SCALE, CARD[1] // CARD_SCALE), Image.LANCZOS)

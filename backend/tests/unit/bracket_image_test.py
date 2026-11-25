@@ -101,15 +101,14 @@ def test_both_themes_draw_with_helmets_in_each_teams_colors():
     assert any(px[:3] == (0xA4, 0xA3, 0xA4) for px in pale.getdata() if px[3] == 255)  # outlined in grey on light
 
 
-def test_only_the_projected_image_has_a_subtitle():
-    """It says what the odds are and how the open spots are filled; a blank or finished one needs none."""
+def test_only_the_projected_image_with_an_open_spot_has_a_subtitle():
+    """It says how the open spots are filled (the footer says which odds); a blank or finished one, or one
+    whose every spot is settled, needs none."""
     from backend.helpers.bracket_image import _subtitle
 
-    assert (
-        _subtitle(False, False)
-        == "Projected odds · Each open spot shows one team that could be there, and their chance"
-    )
-    assert _subtitle(False, True) == "" and _subtitle(True, True) == ""
+    assert _subtitle(False, False, True) == "Each open spot shows one team that could be there, and their chance"
+    assert _subtitle(False, False, False) == ""
+    assert _subtitle(False, True, True) == "" and _subtitle(True, True, True) == ""
 
 
 def test_a_finished_bracket_draws_the_trophy_over_the_championship_game():
