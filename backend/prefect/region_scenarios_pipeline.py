@@ -29,6 +29,7 @@ from backend.helpers.bracket_home_odds import (
     compute_second_round_home_odds,
     compute_semifinal_home_odds,
 )
+from backend.helpers.bracket_matchups import TeamPlayoffOdds, team_playoff_odds
 from backend.helpers.certainty import settle_pair
 from backend.helpers.data_classes import (
     BracketOdds,
@@ -1313,6 +1314,84 @@ def write_region_seed_pairs(
         conn.commit()
 
 
+ClassPlayoffOdds = tuple[dict[str, TeamPlayoffOdds], dict[str, TeamPlayoffOdds]]
+
+
+def _seed_odds(by_region: dict[int, dict[str, StandingsOdds]]) -> dict[int, dict[str, dict[int, float]]]:
+    """region -> team -> {seed: p}, as the bracket model takes it."""
+    return {
+        region: {t: {1: o.p1, 2: o.p2, 3: o.p3, 4: o.p4} for t, o in teams.items()}
+        for region, teams in by_region.items()
+    }
+
+
+def class_playoff_odds(
+    clazz: int,
+    season: int,
+    seeding: dict[int, RegionSeedingData],
+    regions: list[int],
+    win_prob_fn: MatchupProbFn | None,
+    results: list[tuple[str, str]] | None = None,
+) -> ClassPlayoffOdds | None:
+    """Every team's (Toss-up, Projected) chances to reach, host and win each playoff round, from the
+    bracket's own recursion (``team_playoff_odds``), the one ``/bracket/matchups`` shows.
+
+    Worked out from the whole class: the seeding odds readers see (``standings_odds`` in the
+    playoffs, where every playoff team keeps its seed) with the playoff *results*, so a played game
+    is fixed and a bye is known. None when a region of the class is missing from *seeding* (a run
+    for one region) or the class has no playoff format: its regions then use the per-region odds.
+
+    Args:
+        clazz:       MHSAA classification (1–7).
+        season:      Football season year.
+        seeding:     region -> its Phase 1 seeding data.
+        regions:     Every region in the class.
+        win_prob_fn: The class's Projected (Elo) position win function; None for Toss-up only.
+        results:     Playoff results so far, (winner, loser); none in the regular season.
+    """
+    if not regions or any(r not in seeding for r in regions):
+        return None
+    slots = fetch_all_format_slots.fn(clazz, season)
+    if not slots:
+        return None
+    toss = {r: seeding[r].standings_odds or seeding[r].odds for r in regions}
+    proj = {r: seeding[r].standings_odds_weighted or seeding[r].odds_weighted for r in regions}
+    tossup = team_playoff_odds(slots, season, _seed_odds(toss), equal_matchup_prob, results or ())
+    projected = (
+        team_playoff_odds(slots, season, _seed_odds(proj), win_prob_fn, results or ())
+        if win_prob_fn is not None
+        else tossup
+    )
+    return tossup, projected
+
+
+def _bracket_and_hosting(
+    teams: dict[str, StandingsOdds], playoff: dict[str, TeamPlayoffOdds]
+) -> tuple[dict[str, BracketOdds], HomeOdds]:
+    """One mode's ``BracketOdds`` and hosting (P(host | reach)) for a region's *teams*.
+
+    The first round's hosting is given making the playoffs, as readers show it (a bye isn't a
+    home game); each later round's is given reaching it.
+    """
+    bracket: dict[str, BracketOdds] = {}
+    host: dict[str, dict[str, float]] = {k: {} for k in ("first_round", "second_round", "quarterfinals", "semifinals")}
+    for school, o in teams.items():
+        p = playoff.get(school, TeamPlayoffOdds())
+        bracket[school] = BracketOdds(
+            school=school,
+            second_round=p.reach.get("second_round", 0.0),
+            quarterfinals=p.reach.get("quarterfinals", 0.0),
+            semifinals=p.reach.get("semifinals", 0.0),
+            finals=p.reach.get("finals", 0.0),
+            champion=p.champion,
+        )
+        made = o.p1 + o.p2 + o.p3 + o.p4
+        for k in host:
+            reach = made if k == "first_round" else p.reach.get(k, 0.0)
+            host[k][school] = min(1.0, p.host.get(k, 0.0) / reach) if reach > 0 else 0.0
+    return bracket, HomeOdds(**host)
+
+
 @task(retries=2, retry_delay_seconds=10, task_run_name="Get {season} Region Finish Scenarios for {region}-{clazz}A")
 def get_region_finish_scenarios(
     clazz: int,
@@ -1326,6 +1405,7 @@ def get_region_finish_scenarios(
     round_snapshots: dict[int, dict[int, dict[str, StandingsOdds]]] | None = None,
     reuse: Reuse | None = None,
     return_atoms: bool = True,
+    class_odds: ClassPlayoffOdds | None = None,
 ):
     """Phase 2: compute bracket/home odds and write results to DB.
 
@@ -1368,15 +1448,43 @@ def get_region_finish_scenarios(
                             every region on every date (the backfill, the playoff
                             update) and doesn't use the result passes False: kept,
                             a season's paths came to over a gigabyte.
+        class_odds:         The class's (Toss-up, Projected) playoff odds from
+                            ``class_playoff_odds``: the bracket's own reach and
+                            hosting odds, which every flow passes. Without it
+                            (a run for one region), the per-region odds below.
     """
-    logger = get_run_logger()
-
     odds = seeding_data.odds
     odds_weighted = seeding_data.odds_weighted
-    teams = seeding_data.teams
-    completed = seeding_data.completed
-    remaining = seeding_data.remaining
+    if class_odds is not None:
+        bracket, home_odds = _bracket_and_hosting(seeding_data.standings_odds or odds, class_odds[0])
+        bracket_weighted, home_odds_weighted = _bracket_and_hosting(
+            seeding_data.standings_odds_weighted or odds_weighted, class_odds[1]
+        )
+    else:
+        bracket, bracket_weighted, home_odds, home_odds_weighted = _region_bracket_and_hosting(
+            clazz, region, season, seeding_data, matchup_prob_fn, rounds_completed, all_region_odds, round_snapshots
+        )
+    _write_finish(
+        clazz, region, season, seeding_data, as_of_date, bracket, bracket_weighted, home_odds, home_odds_weighted
+    )
+    return _write_scenarios(clazz, region, season, seeding_data, as_of_date, reuse, return_atoms)
 
+
+def _region_bracket_and_hosting(
+    clazz: int,
+    region: int,
+    season: int,
+    seeding_data: RegionSeedingData,
+    matchup_prob_fn: MatchupProbFn | None,
+    rounds_completed: int,
+    all_region_odds: dict[int, dict[str, StandingsOdds]] | None,
+    round_snapshots: dict[int, dict[int, dict[str, StandingsOdds]]] | None,
+) -> tuple[dict[str, BracketOdds], dict[str, BracketOdds], HomeOdds, HomeOdds]:
+    """A region's bracket and hosting odds worked out from the region alone, for a run that
+    doesn't have the whole class (see ``class_playoff_odds``). Opponents in later rounds are
+    averaged over the seeds that could be there."""
+    odds = seeding_data.odds
+    odds_weighted = seeding_data.odds_weighted
     mp_fn = matchup_prob_fn or equal_matchup_prob
 
     num_rounds = fetch_num_rounds.fn(clazz, season)
@@ -1505,6 +1613,36 @@ def get_region_finish_scenarios(
         for school, m in semifinals_home_overall_w.items()
     }
 
+    home_odds = HomeOdds(
+        first_round=first_round_home_given_reach,
+        second_round=second_round_home_given_reach,
+        quarterfinals=quarterfinals_home_given_reach,
+        semifinals=semifinals_home_given_reach,
+    )
+    home_odds_weighted = HomeOdds(
+        first_round=first_round_home_given_reach_w,
+        second_round=second_round_home_given_reach_w,
+        quarterfinals=quarterfinals_home_given_reach_w,
+        semifinals=semifinals_home_given_reach_w,
+    )
+    return bracket, bracket_weighted, home_odds, home_odds_weighted
+
+
+def _write_finish(
+    clazz: int,
+    region: int,
+    season: int,
+    seeding_data: RegionSeedingData,
+    as_of_date: date | None,
+    bracket: dict[str, BracketOdds],
+    bracket_weighted: dict[str, BracketOdds],
+    home_odds: HomeOdds,
+    home_odds_weighted: HomeOdds,
+) -> None:
+    """Write the region's standings row (with its bracket and hosting odds) and seed pairs."""
+    logger = get_run_logger()
+    odds = seeding_data.odds
+    odds_weighted = seeding_data.odds_weighted
     region_standings = fetch_region_standings.fn(clazz, region, season, cutoff_date=as_of_date)
     run_date = as_of_date if as_of_date is not None else date.today()
 
@@ -1524,24 +1662,32 @@ def get_region_finish_scenarios(
         coinflip_teams=seeding_data.coinflip_teams,
         bracket_odds=bracket,
         bracket_odds_weighted=bracket_weighted,
-        home_odds=HomeOdds(
-            first_round=first_round_home_given_reach,
-            second_round=second_round_home_given_reach,
-            quarterfinals=quarterfinals_home_given_reach,
-            semifinals=semifinals_home_given_reach,
-        ),
-        home_odds_weighted=HomeOdds(
-            first_round=first_round_home_given_reach_w,
-            second_round=second_round_home_given_reach_w,
-            quarterfinals=quarterfinals_home_given_reach_w,
-            semifinals=semifinals_home_given_reach_w,
-        ),
+        home_odds=home_odds,
+        home_odds_weighted=home_odds_weighted,
         odds_weighted=seeding_data.standings_odds_weighted or odds_weighted,
     )
     if seeding_data.seed_pairs is not None and seeding_data.seed_pairs_weighted is not None:
         write_region_seed_pairs.fn(
             clazz, region, season, run_date, seeding_data.seed_pairs, seeding_data.seed_pairs_weighted
         )
+
+
+def _write_scenarios(
+    clazz: int,
+    region: int,
+    season: int,
+    seeding_data: RegionSeedingData,
+    as_of_date: date | None,
+    reuse: Reuse | None,
+    return_atoms: bool,
+):
+    """Work out (or reuse) the region's scenarios, team paths and insights, and write them."""
+    odds = seeding_data.odds
+    teams = seeding_data.teams
+    completed = seeding_data.completed
+    remaining = seeding_data.remaining
+    stored_odds = seeding_data.standings_odds or odds
+    run_date = as_of_date if as_of_date is not None else date.today()
 
     R = len(remaining)
     # What the scenarios, paths and insights are worked out from: the games, and with five or fewer
@@ -1745,10 +1891,21 @@ def region_scenarios_data_flow(
     # -----------------------------------------------------------------------
     # Phase 2: compute bracket/home odds and write all results to DB.
     # -----------------------------------------------------------------------
+    # The bracket's own reach and hosting odds, from the whole class.
+    playoff_odds = {
+        c: class_playoff_odds(
+            c,
+            season,
+            {r: seeding[(c, r)] for r in _regions_for(c) if (c, r) in seeding},
+            _regions_for(c),
+            matchup_fns[c],
+        )
+        for c in matchup_fns
+    }
     scenario_dicts: dict = {}
     for c, r in targets:
         scenario_dicts.setdefault(c, {})[r] = get_region_finish_scenarios(
-            c, r, season, quote(seeding[(c, r)]), matchup_fns[c], reuse=quote(reuse)
+            c, r, season, quote(seeding[(c, r)]), matchup_fns[c], reuse=quote(reuse), class_odds=quote(playoff_odds[c])
         )
     times.lap("Bracket odds and scenarios")
     logger.info(
@@ -1900,6 +2057,7 @@ def backfill_historical_snapshots(
 
         # Phase 2: bracket/home odds and write all results with as_of_date=cutoff_date.
         for c, regions in class_regions.items():
+            playoff_odds = class_playoff_odds(c, season, {r: seeding[(c, r)] for r in regions}, regions, matchup_fns[c])
             for r in regions:
                 get_region_finish_scenarios(
                     c,
@@ -1910,6 +2068,7 @@ def backfill_historical_snapshots(
                     as_of_date=cutoff_date,
                     reuse=quote(reuse),
                     return_atoms=False,
+                    class_odds=quote(playoff_odds),
                 )
 
     logger.info(

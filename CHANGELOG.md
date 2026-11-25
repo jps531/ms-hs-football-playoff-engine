@@ -5,6 +5,24 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.40.0
+
+A team's chances to reach, host and win each playoff round, on its region and team pages and in
+their images, are now the bracket's own numbers, worked out for the whole class at once:
+
+- **Byes:** a region with three playoff teams gives one seed a first-round bye (Class 1A's Region 1
+  this season, so Region 3's champion). The region pages had every team playing a first-round game;
+  now that seed goes straight to the second round, and a bye isn't counted as a home game.
+- **The first round, with a bye:** on the day of the first round, a team with a bye counted as out
+  of the playoffs (Calhoun City, on Nov 6). A team is now in until it loses.
+- **Games already played:** Projected odds for the rounds ahead use the opponents already known, not
+  an average of who might have been there, so the region pages and the bracket give the same figure
+  (Louisville's chance to reach the 4A semifinals on Nov 13 read 58% on one and 57% on the other).
+- **Hosting:** home-game odds follow the same games, so they match the bracket's; a team that lost
+  its first-round game still shows it hosted it, if it did.
+
+Past weeks change once their snapshots are worked out again.
+
 ## 1.39.2
 
 The share sheet:

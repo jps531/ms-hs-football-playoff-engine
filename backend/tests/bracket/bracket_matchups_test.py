@@ -18,7 +18,7 @@ from backend.helpers.bracket_home_odds import (
     compute_semifinal_home_odds,
     equal_matchup_prob,
 )
-from backend.helpers.bracket_matchups import bracket_outlook, locked_pairs, merge_modes
+from backend.helpers.bracket_matchups import ROUND_KEYS, bracket_outlook, locked_pairs, merge_modes, team_playoff_odds
 from backend.helpers.data_classes import StandingsOdds
 from backend.tests.data.playoff_brackets_2025 import SLOTS_1A_4A_2025, SLOTS_5A_7A_2025
 
@@ -398,3 +398,52 @@ def test_the_championship_says_each_teams_chance_to_win_it_in_both_modes():
     assert all(o["p_champion"] <= o["p_reach"] for o in final)
     no_projected = merge_modes(tossup, None)[-1]
     assert all(o["p_champion_weighted"] is None for o in no_projected["side_a"]["occupants"])
+
+
+@pytest.mark.parametrize(("label", "slots", "n"), CASES)
+def test_team_playoff_odds_are_the_brackets_own_numbers(label, slots, n):
+    """Each team's reach, hosting and title odds are the outlook's, summed over each round's games."""
+    odds, pairs = _class(slots, n, seed=5)
+    games = bracket_outlook(slots, SEASON, odds, pairs, _lopsided)
+    teams = team_playoff_odds(slots, SEASON, odds, _lopsided)
+    final = games[-1]
+    for team in (t for region in odds.values() for t in region):
+        mine = teams[team]
+        for round_name, key in ROUND_KEYS.items():
+            if not any(g.round_name == round_name for g in games):
+                continue
+            assert mine.reach.get(key, 0.0) == pytest.approx(_reach(games, team, round_name), abs=1e-9)
+            if round_name != "Championship Game":
+                assert mine.host.get(key, 0.0) == pytest.approx(_host_overall(games, team, round_name), abs=1e-9)
+        assert mine.champion == pytest.approx(final.champions.get(team, 0.0), abs=1e-9)
+        assert "finals" not in mine.host  # a neutral site
+
+
+def test_a_team_with_a_bye_skips_the_first_round_and_is_sure_of_the_second():
+    """A three-team region's missing #4 seed: the team that would have played it doesn't play the
+    first round (so can't host it) and is in the second round, as the bracket shows."""
+    odds = {r: {f"R{r}S{s}": {s: 1.0} for s in (1, 2, 3, 4)} for r in range(1, 9)}
+    del odds[1]["R1S4"]  # region 1 has three teams
+    slot = next(s for s in SLOTS_1A_4A_2025 if (s.away_region, s.away_seed) == (1, 4))
+    lucky = f"R{slot.home_region}S{slot.home_seed}"
+    teams = team_playoff_odds(SLOTS_1A_4A_2025, SEASON, odds, equal_matchup_prob)
+    assert teams[lucky].reach.get("first_round", 0.0) == 0.0
+    assert teams[lucky].host.get("first_round", 0.0) == 0.0
+    assert teams[lucky].reach["second_round"] == pytest.approx(1.0)
+    others = [t for t in teams if t != lucky]
+    assert all(teams[t].reach["first_round"] == pytest.approx(1.0) for t in others)
+    assert all(teams[t].reach["second_round"] == pytest.approx(0.5) for t in others)
+
+
+def test_played_games_keep_the_rounds_a_team_reached():
+    """After a first-round loss a team keeps its first round (and its hosting) and has no second;
+    the winner is sure of the second round."""
+    odds = {r: {f"R{r}S{s}": {s: 1.0} for s in (1, 2, 3, 4)} for r in range(1, 5)}
+    first = SLOTS_5A_7A_2025[0]
+    home, away = f"R{first.home_region}S{first.home_seed}", f"R{first.away_region}S{first.away_seed}"
+    teams = team_playoff_odds(SLOTS_5A_7A_2025, SEASON, odds, _lopsided, results=[(away, home)])
+    assert teams[home].reach["first_round"] == pytest.approx(1.0)
+    assert teams[home].host["first_round"] == pytest.approx(1.0)
+    assert teams[home].reach.get("quarterfinals", 0.0) == 0.0
+    assert teams[home].champion == 0.0
+    assert teams[away].reach["quarterfinals"] == pytest.approx(1.0)

@@ -361,6 +361,18 @@ def bracket_outlook(
         One ``GameOutlook`` per game, half by half, round by round, then the
         championship.
     """
+    occupants = _occupants(slots, seed_odds)
+    bracket = _Bracket(slots, season, occupants, win_prob_fn, results)
+    out: list[GameOutlook] = []
+    for node in bracket.nodes():
+        out.append(_game_outlook(bracket, node, occupants, seed_pairs))
+    return out
+
+
+def _occupants(
+    slots: list[FormatSlot], seed_odds: dict[int, dict[str, dict[int, float]]]
+) -> dict[Position, dict[str, float]]:
+    """position -> team -> P(team holds it), with every bracket position present."""
     occupants: dict[Position, dict[str, float]] = {}
     for region, teams in seed_odds.items():
         for team, by_seed in teams.items():
@@ -370,11 +382,99 @@ def bracket_outlook(
     for s in slots:
         occupants.setdefault((s.home_region, s.home_seed), {})
         occupants.setdefault((s.away_region, s.away_seed), {})
+    return occupants
 
+
+# A round's name -> the key its odds are stored under.
+ROUND_KEYS = {
+    "First Round": "first_round",
+    "Second Round": "second_round",
+    "Quarterfinals": "quarterfinals",
+    "Semifinals": "semifinals",
+    "Championship Game": "finals",
+}
+
+
+@dataclass
+class TeamPlayoffOdds:
+    """One team's odds through the bracket, from the same recursion as ``bracket_outlook``.
+
+    ``reach``: round key (``ROUND_KEYS``) -> P(the team plays a game in that round). A team with a
+    bye doesn't play the first round. ``host``: round key -> P(the team plays a game in that round
+    and hosts it); the championship is at a neutral site. ``champion``: P(the team wins it all).
+    """
+
+    reach: dict[str, float] = field(default_factory=dict)
+    host: dict[str, float] = field(default_factory=dict)
+    champion: float = 0.0
+
+
+def team_playoff_odds(
+    slots: list[FormatSlot],
+    season: int,
+    seed_odds: dict[int, dict[str, dict[int, float]]],
+    win_prob_fn: MatchupProbFn,
+    results: Iterable[tuple[str, str]] = (),
+) -> dict[str, TeamPlayoffOdds]:
+    """Each team's chance to reach, host and win each round: the bracket's own numbers, per team.
+
+    A team's chance of reaching a round is its chance of being on a side of one of that round's
+    games, summed over the games (which ``bracket_outlook`` lists per game). Hosting follows the
+    position pairing, as the matchups' hosting does. Games already played are fixed, so a team out
+    of the playoffs keeps the rounds it reached. Byes are known (a seed no team can take): the
+    other side advances without a game.
+
+    Args:
+        slots: First-round format slots for the class and season.
+        season: Season (hosting tiebreaks depend on odd/even years).
+        seed_odds: region -> team -> {seed: P(team takes that seed)}, every region in the class.
+        win_prob_fn: Position-level win probability (home position first).
+        results: Confirmed playoff results as (winner, loser) team names.
+
+    Returns:
+        team -> ``TeamPlayoffOdds``, for every team with a chance at some seed.
+    """
+    occupants = _occupants(slots, seed_odds)
     bracket = _Bracket(slots, season, occupants, win_prob_fn, results)
-    out: list[GameOutlook] = []
+    out: dict[str, TeamPlayoffOdds] = {}
+
+    def team(name: str) -> TeamPlayoffOdds:
+        """The team's entry, made on first use."""
+        return out.setdefault(name, TeamPlayoffOdds())
+
     for node in bracket.nodes():
-        out.append(_game_outlook(bracket, node, occupants, seed_pairs))
+        name = (
+            "Championship Game"
+            if node.round_index == -1
+            else _round_names(len(bracket.rounds[node.half]))[node.round_index]
+        )
+        key = ROUND_KEYS.get(name, name)
+        for x, px in node.side_a.items():
+            for y, py in node.side_b.items():
+                fx, fy = bracket._filled(x), bracket._filled(y)
+                if fx <= _EPS or fy <= _EPS:
+                    continue  # a bye: no game is played
+                h = bracket.host_prob(node, x, y)
+                for t, pt in occupants.get(x, {}).items():
+                    entry = team(t)
+                    entry.reach[key] = entry.reach.get(key, 0.0) + px * py * pt * fy
+                    if h is not None:
+                        entry.host[key] = entry.host.get(key, 0.0) + px * py * pt * fy * h
+                for u, pu in occupants.get(y, {}).items():
+                    entry = team(u)
+                    entry.reach[key] = entry.reach.get(key, 0.0) + px * py * pu * fx
+                    if h is not None:
+                        entry.host[key] = entry.host.get(key, 0.0) + px * py * pu * fx * (1.0 - h)
+        if node.round_index == -1:
+            for x, px in node.winner.items():
+                for t, pt in occupants.get(x, {}).items():
+                    team(t).champion += px * pt
+    # A team can't be in two places: a sum a hair over 1 is rounding.
+    for entry in out.values():
+        for d in (entry.reach, entry.host):
+            for k, v in d.items():
+                d[k] = min(v, 1.0)
+        entry.champion = min(entry.champion, 1.0)
     return out
 
 
