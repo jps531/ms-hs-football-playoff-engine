@@ -1842,6 +1842,9 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 }
 .share-sheet__frame.is-wide { height: min(26vh, 18rem); }
 .share-sheet__preview { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
+/* The last image, while the one chosen loads (app.js steadyPreview). */
+.share-sheet__preview.is-stale { opacity: 0.45; transition: opacity 120ms ease-out; }
+@media (prefers-reduced-motion: reduce) { .share-sheet__preview.is-stale { transition: none; } }
 .share-sheet__missing { padding: 16px; font-size: 14px; text-align: center; }
 .share-sheet__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .share-sheet__primary, .share-sheet__secondary {

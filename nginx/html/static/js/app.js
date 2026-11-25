@@ -2127,16 +2127,50 @@ function shareHtml() {
     </div>`;
 }
 
-/** Redraw the open share sheet (an option chosen, the image loaded), keeping focus on the same control. */
+/**
+ * Redraw the open share sheet (an option chosen, the image loaded), keeping focus on the same control,
+ * and the preview steady: the same image keeps its element (drawing it again would blank it a moment),
+ * and a new one waits, the old one faded in its place, until it can be drawn.
+ */
 function refreshShare() {
   if (!shareSheet?.open) return;
   const focused = document.activeElement?.closest?.("[data-share-opt], [data-share-act], [data-share-page]");
   const key = focused?.dataset.shareOpt ?? focused?.dataset.shareAct ?? focused?.dataset.sharePage;
+  const shown = shareSheet.querySelector(".share-sheet__preview");
   shareSheet.innerHTML = shareHtml();
+  steadyPreview(shown);
   const again = key && shareSheet.querySelector(
     `[data-share-opt="${CSS.escape(key)}"], [data-share-act="${CSS.escape(key)}"], [data-share-page="${CSS.escape(key)}"]`,
   );
   (again && !again.disabled ? again : shareSheet.querySelector(".game-sheet__title"))?.focus({ preventScroll: true });
+}
+
+/** The preview just drawn, in place of *shown* (the one before it, or null): see refreshShare. */
+function steadyPreview(shown) {
+  const next = shareSheet.querySelector(".share-sheet__preview");
+  if (!shown || !next || !shown.complete || !shown.naturalWidth) return;
+  if (shown.getAttribute("src") === next.getAttribute("src")) {
+    shown.alt = next.alt;
+    shown.classList.remove("is-stale");
+    next.replaceWith(shown);
+    return;
+  }
+  if (next.complete && next.naturalWidth) return; // already loaded: nothing to wait for
+  shown.classList.add("is-stale");
+  shown.alt = "";
+  next.replaceWith(shown);
+  const swap = () => {
+    if (shown.isConnected) shown.replaceWith(next);
+  };
+  (next.decode ? next.decode() : Promise.reject()).then(swap, () => {
+    // Couldn't be drawn (or no decode()): swap once it's loaded, or it failed, whichever comes.
+    if (next.complete) {
+      swap();
+    } else {
+      next.addEventListener("load", swap, { once: true });
+      next.addEventListener("error", swap, { once: true });
+    }
+  });
 }
 
 /** The region page's sheet switched between the region and one of its teams: the same sheet, for that. */
