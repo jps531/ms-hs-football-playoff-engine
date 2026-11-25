@@ -5,6 +5,12 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.39.1
+
+- The share sheet's preview no longer flashes blank when an option changes: the image shown stays,
+  faded, until the one chosen is ready, then takes its place; and it doesn't blink again once the
+  image has downloaded.
+
 ## 1.39.0
 
 Images to share:
