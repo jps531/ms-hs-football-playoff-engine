@@ -1,11 +1,12 @@
 """Unit tests for the GET /bracket/slots/{slot} building blocks in backend.helpers.api_helpers.
 
 ``_resolve_slot_group`` and ``_candidate_seeds_by_region`` are pure bracket-tree
-navigation; ``build_slot_outlook_teams`` wires them to the existing
-``compute_bracket_advancement_odds``/``compute_*_home_odds`` functions
-(already covered by backend/tests/bracket/bracket_home_odds_probabilistic_test.py)
-and is cross-checked against those functions directly rather than re-deriving
-the underlying probability math here.
+navigation; ``build_slot_outlook_teams`` takes each team's odds for the slot's
+game from the class's bracket (``game_playoff_odds``). With every position
+filled and no game played, those match the per-region
+``compute_bracket_advancement_odds``/``compute_*_home_odds`` functions, so the
+locked groups are cross-checked against them rather than re-deriving the
+probability math here (``_full`` fills a fixture's other positions).
 """
 
 import pytest
@@ -40,6 +41,19 @@ def _odds(school: str, p1: float = 0.0, p2: float = 0.0, p3: float = 0.0, p4: fl
 def _locked(school: str, seed: int) -> StandingsOdds:
     """Build a StandingsOdds certain to hold exactly one seed (mirrors production fixtures)."""
     return _odds(school, **{f"p{seed}": 1.0})
+
+
+def _full(slots, by_region: dict[int, dict[str, StandingsOdds]]) -> dict[int, dict[str, StandingsOdds]]:
+    """*by_region* with every other bracket position held by a locked placeholder team ("R2S3"), as a
+    real class's are: the bracket is worked out for the whole class, and a seed no team can take is a
+    bye, so a fixture with empty positions would hand their opponents byes."""
+    out = {r: dict(teams) for r, teams in by_region.items()}
+    for s in slots:
+        for region, seed in ((s.home_region, s.home_seed), (s.away_region, s.away_seed)):
+            teams = out.setdefault(region, {})
+            if not any(getattr(o, f"p{seed}") > 0 for o in teams.values()):
+                teams[f"R{region}S{seed}"] = _locked(f"R{region}S{seed}", seed)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -166,8 +180,8 @@ class TestBuildSlotOutlookTeamsFirstRound:
     def test_contested_slot_returns_every_candidate_ranked_by_p_reach(self):
         """A contested slot returns every nonzero candidate, ranked by descending p_reach."""
         by_region = {
-            1: {"Alpha": _odds("Alpha", p1=0.6), "Beta": _odds("Beta", p1=0.3)},
-            2: {"Gamma": _odds("Gamma", p4=0.4), "Delta": _odds("Delta", p4=0.5)},
+            1: {"Alpha": _odds("Alpha", p1=0.6), "Beta": _odds("Beta", p1=0.4)},
+            2: {"Gamma": _odds("Gamma", p4=0.45), "Delta": _odds("Delta", p4=0.55)},
         }
         teams = build_slot_outlook_teams(1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON)
         assert teams is not None
@@ -177,16 +191,19 @@ class TestBuildSlotOutlookTeamsFirstRound:
         assert by_school["Alpha"].p_reach == pytest.approx(0.6)
         assert by_school["Alpha"].p_host_given_reach == pytest.approx(1.0)  # home seed
         assert by_school["Alpha"].p_host_overall == pytest.approx(0.6)
-        assert by_school["Gamma"].p_reach == pytest.approx(0.4)
+        assert by_school["Gamma"].p_reach == pytest.approx(0.45)
         assert by_school["Gamma"].p_host_given_reach == pytest.approx(0.0)  # away seed
         assert by_school["Gamma"].p_host_overall == pytest.approx(0.0)
 
     def test_zero_probability_candidates_excluded(self):
         """Candidates with zero probability of holding the relevant seed are excluded."""
-        by_region = {1: {"Alpha": _odds("Alpha", p1=1.0), "Zero": _odds("Zero", p1=0.0)}, 2: {}}
+        by_region = {
+            1: {"Alpha": _odds("Alpha", p1=1.0), "Zero": _odds("Zero", p1=0.0)},
+            2: {"Beta": _locked("Beta", 4)},
+        }
         teams = build_slot_outlook_teams(1, "first_round", by_region, SLOTS_5A_7A_2025, SEASON)
         assert teams is not None
-        assert [t.school for t in teams] == ["Alpha"]
+        assert [t.school for t in teams] == ["Alpha", "Beta"]
 
     def test_clinched_slot_has_exactly_one_team_per_side(self):
         """A clinched slot yields exactly one team per side, each with p_reach == 1.0."""
@@ -246,10 +263,12 @@ class TestBuildSlotOutlookTeamsLaterRounds:
             3: {"R3S2": _locked("R3S2", 2)},
             4: {"R4S3": _locked("R4S3", 3)},
         }
+        by_region = _full(SLOTS_1A_4A_2025, by_region)
         teams = build_slot_outlook_teams(1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON)
         assert teams is not None
         by_school = {t.school: t for t in teams}
-        assert set(by_school) == {"R1S1", "R2S4", "R3S2", "R4S3"}
+        assert {"R1S1", "R2S4", "R3S2", "R4S3"} <= set(by_school)
+        assert len(by_school) == 8  # the four first-round games feeding the quarterfinal
 
         for region, school in ((1, "R1S1"), (2, "R2S4"), (3, "R3S2"), (4, "R4S3")):
             region_odds = by_region[region]
@@ -266,6 +285,7 @@ class TestBuildSlotOutlookTeamsLaterRounds:
     def test_locked_second_round_group_matches_direct_compute_calls(self):
         """A locked second-round group's outputs match direct compute_* calls per region."""
         by_region = {1: {"R1S1": _locked("R1S1", 1)}, 2: {"R2S4": _locked("R2S4", 4)}}
+        by_region = _full(SLOTS_1A_4A_2025, by_region)
         teams = build_slot_outlook_teams(1, "second_round", by_region, SLOTS_1A_4A_2025, SEASON)
         assert teams is not None
         by_school = {t.school: t for t in teams}
@@ -286,6 +306,7 @@ class TestBuildSlotOutlookTeamsLaterRounds:
             3: {"R3S2": _locked("R3S2", 2)},
             4: {"R4S3": _locked("R4S3", 3)},
         }
+        by_region = _full(SLOTS_1A_4A_2025, by_region)
         teams = build_slot_outlook_teams(1, "semifinals", by_region, SLOTS_1A_4A_2025, SEASON)
         assert teams is not None
         by_school = {t.school: t for t in teams}
@@ -307,6 +328,7 @@ class TestBuildSlotOutlookTeamsLaterRounds:
         by_region[2] = {"Gamma": _locked("Gamma", 4)}
         by_region[3] = {"Delta": _locked("Delta", 2)}
         by_region[4] = {"Epsilon": _locked("Epsilon", 3)}
+        by_region = _full(SLOTS_1A_4A_2025, by_region)
         teams = build_slot_outlook_teams(1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON)
         assert teams is not None
         assert "Alpha" in {t.school for t in teams}
@@ -322,29 +344,27 @@ class TestBuildSlotOutlookTeamsLaterRounds:
             3: {"R3S2": _locked("R3S2", 2)},
             4: {"R4S3": _locked("R4S3", 3)},
         }
+        by_region = _full(SLOTS_1A_4A_2025, by_region)
         teams = build_slot_outlook_teams(1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON)
         assert teams is not None
         assert "Zero" not in {t.school for t in teams}
         assert "R1S1" in {t.school for t in teams}
 
-    def test_eliminated_school_with_stale_positive_seed_prob_excluded(self):
-        """A school flagged eliminated but with a leftover positive seed
-        probability (a stale/inconsistent snapshot) has p_reach forced to 0.0
-        by the eliminated branch of compute_bracket_advancement_odds, and is
-        excluded from the outlook despite passing the candidate-seed check."""
-        stale = StandingsOdds(
-            school="Stale", p1=1.0, p2=0.0, p3=0.0, p4=0.0,
-            p_playoffs=1.0, final_playoffs=1.0, clinched=True, eliminated=True,
+    def test_a_team_that_lost_isnt_in_a_later_game(self):
+        """A played first-round loss is fixed: the loser can't reach the quarterfinal, and the winner
+        is sure of the second round."""
+        by_region = _full(SLOTS_1A_4A_2025, {})
+        first = SLOTS_1A_4A_2025[0]
+        home, away = f"R{first.home_region}S{first.home_seed}", f"R{first.away_region}S{first.away_seed}"
+        teams = build_slot_outlook_teams(
+            1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON, results=[(away, home)]
         )
-        by_region = {
-            1: {"Stale": stale},
-            2: {"R2S4": _locked("R2S4", 4)},
-            3: {"R3S2": _locked("R3S2", 2)},
-            4: {"R4S3": _locked("R4S3", 3)},
-        }
-        teams = build_slot_outlook_teams(1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON)
         assert teams is not None
-        assert "Stale" not in {t.school for t in teams}
+        assert home not in {t.school for t in teams}
+        second = build_slot_outlook_teams(
+            1, "second_round", by_region, SLOTS_1A_4A_2025, SEASON, results=[(away, home)]
+        )
+        assert {t.school: t.p_reach for t in second}[away] == pytest.approx(1.0)
 
     def test_weighted_fn_populates_weighted_fields(self):
         """Passing a weighted win-probability function populates the *_weighted fields."""
@@ -465,6 +485,7 @@ class TestBuildSlotOutlookTeamsHostConditions:
             3: {"R3S2": _locked("R3S2", 2)},
             4: {"R4S3": _locked("R4S3", 3)},
         }
+        by_region = _full(SLOTS_1A_4A_2025, by_region)
         teams = build_slot_outlook_teams(
             1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON,
             seed_atoms_by_region={1: None, 2: None, 3: None, 4: None},
@@ -512,6 +533,7 @@ class TestBuildSlotOutlookTeamsReachConditions:
             3: {"R3S2": _locked("R3S2", 2)},
             4: {"R4S3": _locked("R4S3", 3)},
         }
+        by_region = _full(SLOTS_1A_4A_2025, by_region)
         teams = build_slot_outlook_teams(
             1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON,
             seed_atoms_by_region={1: None, 2: None, 3: None, 4: None},
@@ -534,6 +556,7 @@ class TestBuildSlotOutlookTeamsReachConditions:
             3: {"R3S2": _locked("R3S2", 2)},
             4: {"R4S3": _locked("R4S3", 3)},
         }
+        by_region = _full(SLOTS_1A_4A_2025, by_region)
         teams = build_slot_outlook_teams(
             1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON,
             seed_atoms_by_region={1: None, 2: None, 3: None, 4: None},
@@ -553,6 +576,7 @@ class TestBuildSlotOutlookTeamsReachConditions:
             3: {"R3S2": _locked("R3S2", 2)},
             4: {"R4S3": _locked("R4S3", 3)},
         }
+        by_region = _full(SLOTS_1A_4A_2025, by_region)
         teams = build_slot_outlook_teams(
             1, "quarterfinals", by_region, SLOTS_1A_4A_2025, SEASON,
             seed_atoms_by_region={1: None, 2: None, 3: None, 4: None},

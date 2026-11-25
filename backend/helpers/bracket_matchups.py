@@ -409,6 +409,90 @@ class TeamPlayoffOdds:
     champion: float = 0.0
 
 
+@dataclass
+class GameOdds:
+    """One game's odds for each holder (a team, or a (region, seed) position): P(plays in it) and
+    P(plays in it and hosts it)."""
+
+    game_id: str
+    round_key: str  # ``ROUND_KEYS``' value for the game's round
+    reach: dict = field(default_factory=dict)
+    host: dict = field(default_factory=dict)
+
+
+def _game_odds(
+    slots: list[FormatSlot],
+    season: int,
+    seed_odds: dict[int, dict[str, dict[int, float]]],
+    win_prob_fn: MatchupProbFn,
+    results: Iterable[tuple[str, str]],
+    by_position: bool,
+) -> tuple[list[GameOdds], dict]:
+    """Every game's reach and hosting odds, and the title odds, per team or per position.
+
+    The bracket recursion of ``bracket_outlook``: a holder's chance of playing a game is its chance
+    of arriving on one of the game's sides with an opponent there (a bye is no game). Per position,
+    it is for whoever holds the position (the position's own occupancy left out); per team, each
+    position's occupancy is weighed in. Hosting follows the position pairing, as the matchups'
+    hosting does; the championship is at a neutral site.
+    """
+    occupants = _occupants(slots, seed_odds)
+    bracket = _Bracket(slots, season, occupants, win_prob_fn, results)
+
+    def holders(pos: Position) -> Iterable[tuple]:
+        """Who's counted for *pos*, with their weight."""
+        return [(pos, 1.0)] if by_position else occupants.get(pos, {}).items()
+
+    games: list[GameOdds] = []
+    champion: dict = {}
+    for node in bracket.nodes():
+        name = (
+            "Championship Game"
+            if node.round_index == -1
+            else _round_names(len(bracket.rounds[node.half]))[node.round_index]
+        )
+        game = GameOdds(node.game_id, ROUND_KEYS.get(name, name))
+        for x, px in node.side_a.items():
+            for y, py in node.side_b.items():
+                fx, fy = bracket._filled(x), bracket._filled(y)
+                if fx <= _EPS or fy <= _EPS:
+                    continue  # a bye: no game is played
+                h = bracket.host_prob(node, x, y)
+                for pos, other_filled, host_share in ((x, fy, h), (y, fx, None if h is None else 1.0 - h)):
+                    for holder, w in holders(pos):
+                        p = px * py * w * other_filled
+                        game.reach[holder] = game.reach.get(holder, 0.0) + p
+                        if host_share is not None:
+                            game.host[holder] = game.host.get(holder, 0.0) + p * host_share
+        games.append(game)
+        if node.round_index == -1:
+            for x, px in node.winner.items():
+                for holder, w in holders(x):
+                    champion[holder] = champion.get(holder, 0.0) + px * w
+    return games, champion
+
+
+def _by_round(games: list[GameOdds], champion: dict) -> dict:
+    """Each holder's ``TeamPlayoffOdds``: its games' odds summed per round."""
+    out: dict = {}
+    for game in games:
+        for holder, p in game.reach.items():
+            entry = out.setdefault(holder, TeamPlayoffOdds())
+            entry.reach[game.round_key] = entry.reach.get(game.round_key, 0.0) + p
+        for holder, p in game.host.items():
+            entry = out.setdefault(holder, TeamPlayoffOdds())
+            entry.host[game.round_key] = entry.host.get(game.round_key, 0.0) + p
+    for holder, p in champion.items():
+        out.setdefault(holder, TeamPlayoffOdds()).champion = p
+    # A holder can't be in two places: a sum a hair over 1 is rounding.
+    for entry in out.values():
+        for d in (entry.reach, entry.host):
+            for k, v in d.items():
+                d[k] = min(v, 1.0)
+        entry.champion = min(entry.champion, 1.0)
+    return out
+
+
 def team_playoff_odds(
     slots: list[FormatSlot],
     season: int,
@@ -434,48 +518,49 @@ def team_playoff_odds(
     Returns:
         team -> ``TeamPlayoffOdds``, for every team with a chance at some seed.
     """
-    occupants = _occupants(slots, seed_odds)
-    bracket = _Bracket(slots, season, occupants, win_prob_fn, results)
-    out: dict[str, TeamPlayoffOdds] = {}
+    return _by_round(*_game_odds(slots, season, seed_odds, win_prob_fn, results, by_position=False))
 
-    def team(name: str) -> TeamPlayoffOdds:
-        """The team's entry, made on first use."""
-        return out.setdefault(name, TeamPlayoffOdds())
 
-    for node in bracket.nodes():
-        name = (
-            "Championship Game"
-            if node.round_index == -1
-            else _round_names(len(bracket.rounds[node.half]))[node.round_index]
-        )
-        key = ROUND_KEYS.get(name, name)
-        for x, px in node.side_a.items():
-            for y, py in node.side_b.items():
-                fx, fy = bracket._filled(x), bracket._filled(y)
-                if fx <= _EPS or fy <= _EPS:
-                    continue  # a bye: no game is played
-                h = bracket.host_prob(node, x, y)
-                for t, pt in occupants.get(x, {}).items():
-                    entry = team(t)
-                    entry.reach[key] = entry.reach.get(key, 0.0) + px * py * pt * fy
-                    if h is not None:
-                        entry.host[key] = entry.host.get(key, 0.0) + px * py * pt * fy * h
-                for u, pu in occupants.get(y, {}).items():
-                    entry = team(u)
-                    entry.reach[key] = entry.reach.get(key, 0.0) + px * py * pu * fx
-                    if h is not None:
-                        entry.host[key] = entry.host.get(key, 0.0) + px * py * pu * fx * (1.0 - h)
-        if node.round_index == -1:
-            for x, px in node.winner.items():
-                for t, pt in occupants.get(x, {}).items():
-                    team(t).champion += px * pt
-    # A team can't be in two places: a sum a hair over 1 is rounding.
-    for entry in out.values():
-        for d in (entry.reach, entry.host):
-            for k, v in d.items():
-                d[k] = min(v, 1.0)
-        entry.champion = min(entry.champion, 1.0)
-    return out
+def slot_playoff_odds(
+    slots: list[FormatSlot],
+    season: int,
+    seed_odds: dict[int, dict[str, dict[int, float]]],
+    win_prob_fn: MatchupProbFn,
+    results: Iterable[tuple[str, str]] = (),
+) -> dict[Position, TeamPlayoffOdds]:
+    """The same odds per (region, seed) position: for whoever holds it, as ``/bracket``'s slots are.
+
+    A team's own odds are its seed odds times its positions' odds, summed over the seeds, which is
+    ``team_playoff_odds``. A position no team can take has no game, so no odds; the team that would
+    have played it has a bye. Arguments as ``team_playoff_odds``.
+    """
+    return _by_round(*_game_odds(slots, season, seed_odds, win_prob_fn, results, by_position=True))
+
+
+def game_playoff_odds(
+    slots: list[FormatSlot],
+    season: int,
+    seed_odds: dict[int, dict[str, dict[int, float]]],
+    win_prob_fn: MatchupProbFn,
+    results: Iterable[tuple[str, str]] = (),
+) -> dict[str, GameOdds]:
+    """Each game's odds per team, by game id (``bracket_outlook``'s ``game_id``): who plays in it
+    and hosts it. Summed over a round's games, they are ``team_playoff_odds``. Arguments as
+    ``team_playoff_odds``."""
+    games, _ = _game_odds(slots, season, seed_odds, win_prob_fn, results, by_position=False)
+    return {g.game_id: g for g in games}
+
+
+def game_id_for(slots: list[FormatSlot], slot: int, round_index: int) -> str | None:
+    """The id of the game in round *round_index* (0 = first round, within the half) that first-round
+    *slot*'s winner plays in: ``"{half}-{round}-{index}"``, as ``bracket_outlook`` names it. None for
+    an unknown slot."""
+    for ns in ("N", "S"):
+        half = sorted((s for s in slots if s.north_south == ns), key=lambda s: s.slot)
+        for i, s in enumerate(half):
+            if s.slot == slot:
+                return f"{ns}-{round_index}-{i >> round_index}"
+    return None
 
 
 def _team_side(side: dict[Position, float], occupants: dict[Position, dict[str, float]]) -> dict[str, float]:
