@@ -5,6 +5,28 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.37.0
+
+Every share image and link preview, in one house style:
+
+- **A new footer:** the site's helmet, name and address at the right, and at the left what the image
+  reflects, its odds named in full ("Through Week 8 · Oct 16 · Projected odds"). The "Projected
+  odds" labels each image carried elsewhere are gone.
+- Column and section headings in Nippo, the site's title type, and evenly spaced: text is drawn
+  larger and scaled down, so letters sit where the font puts them ("Kosciusko" no longer bunches up),
+  and letter-spaced headings keep the font's kerning.
+- Titles with a "g" in them ("Region") no longer crowd the line under them.
+- The site's link preview looks like the front page: "Welcome to Mississippi High School Football", its
+  helmet, and what the site does.
+- A class's link preview lists its "Region leaders".
+- A team's link previews show its helmet; its region one leads with "Class 4A › Region 3-4A", like the
+  site's breadcrumb. On its bracket one a loss's "L" is red and a set game is locked.
+- A bracket's link preview shows the helmets of the teams likeliest to win it all, or of its champion.
+- A bracket image explains its open spots only when it has one.
+- A team's image keeps its playoffs under its schedule, rather than at the foot of the page.
+- The scenarios images name the region page's address once, above the footer, rather than "on the
+  region page" in each card.
+
 ## 1.36.1
 
 Share images:

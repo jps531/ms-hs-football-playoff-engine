@@ -18,16 +18,16 @@ from __future__ import annotations
 
 import math
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from backend.helpers import region_map
 from backend.helpers.region_map_image import PAD, _Frame, _Page, place, region_color
 from backend.helpers.region_pages import PLACE_FALLBACK
-from backend.helpers.share_cards import _inter, _nippo, fit
+from backend.helpers.share_cards import _inter, _nippo, fit, smooth_draw
 
 WIDTH = 2160  # 1080 wide at 2x, like the other share images; the height follows the rows
 HEADER = 380  # the title and its line, above the grid
-FOOTER = 150  # the site's address, below it
+FOOTER = 220  # the site's lockup (footer), below it
 COL_GAP = 40
 ROW_GAP = 64
 MAX_CELL = 880  # a map's widest (one or two seasons)
@@ -115,7 +115,7 @@ def render_class_timeline(clazz: int, cycles: list[dict], theme: str) -> list[Im
     probe = Image.new("RGB", (1, 1))
     probe_cell = grid(len(cycles), 120)[1]
     probe_big, probe_small, probe_line = _sizes(probe_cell)
-    measure = ImageDraw.Draw(probe)
+    measure = smooth_draw(probe)
     widest = max(measure.textlength(", ".join(counts(c)), font=_inter(probe_small, 500)) for c in cycles)
     stacked = widest > probe_cell  # "36 schools" over "8 regions" when the two don't fit on a line
     caption = 24 + probe_big + 12 + probe_line * (2 if stacked else 1)

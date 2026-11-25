@@ -25,6 +25,7 @@ from backend.helpers.share_cards import (
     _nippo,
     _tracked,
     _tracked_width,
+    brand_footer,
     display_order,
     fit,
     format_pct,
@@ -32,11 +33,12 @@ from backend.helpers.share_cards import (
     odds_bucket,
     position_labels,
     record_text,
+    smooth_draw,
     standing_positions,
     team_status,
+    theme_name,
 )
 from backend.helpers.static_pages import (
-    MODE_LABELS,
     complete_scenario_cards,
     initials,
     insight_cards,
@@ -51,6 +53,7 @@ from backend.helpers.static_pages import (
 SIZE = (2160, 2700)  # 1080x1350 at 2x
 PAD = 104
 SHOW_ALL_PAGES = 5  # a list that fits in this many pages is shown in full
+LINK_H = 56  # the line over a scenarios page's footer with the region page's address
 CAPPED_PAGES = 4  # a longer one stops here, and its last page points to the region page for the rest
 CLINCHED_BG = "#137252"  # --state-clinched (brand-700), both themes
 ELIMINATED_BG = "#B91C1C"  # --state-eliminated
@@ -74,7 +77,7 @@ class _Page:
         """A blank page in *theme*."""
         t = THEMES[theme]
         img = Image.new("RGB", SIZE, t.bg)
-        return cls(img, ImageDraw.Draw(img), t, teams)
+        return cls(img, smooth_draw(img), t, teams)
 
     def mark(self, school: str, x: float, mid: float, size: int) -> None:
         """A team's helmet in its colors, or its initials in a circle when it has none."""
@@ -107,7 +110,7 @@ class _Page:
 
     def label(self, x: float, base: float, text: str, size: int = 24, color: str | None = None, anchor="ls") -> None:
         """A small letter-spaced label ("REMAINING GAMES")."""
-        _tracked(self.draw, (x, base), text.upper(), _inter(size, 600), color or self.t.text_2, 2, anchor=anchor)
+        _tracked(self.draw, (x, base), text.upper(), _nippo(size), color or self.t.text_2, 2, anchor=anchor)
 
 
 def _wrap(draw: ImageDraw.ImageDraw, text: str, font, width: float) -> list[str]:
@@ -130,12 +133,12 @@ def _wrap(draw: ImageDraw.ImageDraw, text: str, font, width: float) -> list[str]
 def _header(page: _Page, title: str, subtitle: str, right: list[str]) -> float:
     """Title (and a line under it), with up to two small labels at the right; returns where content starts."""
     d, t = page.draw, page.t
-    right_w = max((_tracked_width(d, r.upper(), _inter(26, 600), 2) for r in right), default=0)
+    right_w = max((_tracked_width(d, r.upper(), _nippo(26), 2) for r in right), default=0)
     font = _nippo(124)
     d.text((PAD, PAD + 104), fit(d, title, font, SIZE[0] - 2 * PAD - right_w - 40), font=font, fill=t.text, anchor="ls")
     for i, r in enumerate(right):
         page.label(SIZE[0] - PAD, PAD + 40 + i * 44, r, 26, anchor="rs")
-    top = PAD + 104
+    top = PAD + 104 + 12  # clear of the title's descenders ("Region")
     if subtitle:
         f = _inter(42, 500)
         for line in _wrap(d, subtitle, f, SIZE[0] - 2 * PAD)[:3]:
@@ -146,10 +149,7 @@ def _header(page: _Page, title: str, subtitle: str, right: list[str]) -> float:
 
 def _footer(page: _Page, stamp: str) -> float:
     """The stamp and the site's address along the bottom; returns where content must end."""
-    base = SIZE[1] - PAD + 8
-    page.label(PAD, base, stamp, 28)
-    page.draw.text((SIZE[0] - PAD, base), SITE_HOST, font=_inter(44, 600), fill=page.t.text, anchor="rs")
-    return SIZE[1] - PAD - 90
+    return brand_footer(page.img, theme_name(page.t), PAD - 16, stamp, 40, 30, page.t.text_2)
 
 
 def _rule(page: _Page, y: float, x0: float = PAD, x1: float = SIZE[0] - PAD) -> None:
@@ -463,9 +463,7 @@ def render_region_overview(
     (*playoffs*, from ``region_playoffs``) and how its ties were broken, as far as they fit. One page;
     what doesn't fit is pointed to on the region page."""
     page = _Page.new(theme, teams or {})
-    top = _header(
-        page, f"{season} Region {region}-{clazz}A", payload.get("headline") or "", [f"{MODE_LABELS[mode]} odds"]
-    )
+    top = _header(page, f"{season} Region {region}-{clazz}A", payload.get("headline") or "", [])
     bottom = _footer(page, stamp)
     rows = remaining_games(payload.get("remaining_games") or [], games)
     paths = [] if rows else (playoffs or [])
@@ -612,10 +610,10 @@ def _conditions(page: _Page, x: float, y: float, width: float, groups: list[list
 def _why(page: _Page, x: float, y: float, width: float, why: list[dict], draw: bool) -> float:
     """A scenario's "why this order": each tie, the results that pick it out, and the steps. Returns the height."""
     d, t = page.draw, page.t
-    head, body, small = _inter(30, 600), _inter(28, 400), _inter(22, 600)
+    head, body = _inter(30, 600), _inter(28, 400)
     h = 46.0
     if draw:
-        _tracked(d, (x, y + 34), "WHY THIS ORDER", small, t.text_2, 2)
+        _tracked(d, (x, y + 34), "WHY THIS ORDER", _nippo(22), t.text_2, 2)
     for w in why:
         lines = [(head, t.text, s) for s in _wrap(d, w["title"], head, width)]
         if w["when"]:
@@ -639,7 +637,7 @@ def _scenario_card(page: _Page, x: float, y: float, card: dict, mode: str, expla
     h = CARD_PAD + 8
     p = card["p_weighted"] if mode == "projected" else card["p"]
     if draw:
-        d.text((left, y + h + 34), card["label"], font=_inter(40, 700), fill=t.text, anchor="ls")
+        d.text((left, y + h + 34), card["label"], font=_nippo(40), fill=t.text, anchor="ls")
         if p is not None:
             page.pill(x + COL_W - CARD_PAD, y + h + 20, p, 136, 56, 30)
     h += 70
@@ -692,7 +690,7 @@ def _scenario_card(page: _Page, x: float, y: float, card: dict, mode: str, expla
             if draw:
                 d.text(
                     (left, y + h + 34),
-                    "Why this order: on the region page",
+                    "Why this order: at the address below",
                     font=_inter(26, 500),
                     fill=t.text_2,
                     anchor="ls",
@@ -703,7 +701,7 @@ def _scenario_card(page: _Page, x: float, y: float, card: dict, mode: str, expla
         if draw:
             d.text(
                 (left, y + h + 34),
-                f"OR {n} more {'way' if n == 1 else 'ways'}: on the region page",
+                f"OR {n} more {'way' if n == 1 else 'ways'}: at the address below",
                 font=_inter(28, 600),
                 fill=t.text_2,
                 anchor="ls",
@@ -718,10 +716,10 @@ def _insight_card(page: _Page, x: float, y: float, card: dict, draw: bool) -> fl
     inner = COL_W - 2 * CARD_PAD
     left = x + CARD_PAD
     h = CARD_PAD + 8
-    lines = _wrap(d, f"{card['title']} IF", _inter(36, 700), inner)
+    lines = _wrap(d, f"{card['title']} IF", _nippo(36), inner)
     if draw:
         for i, line in enumerate(lines):
-            d.text((left, y + h + 34 + i * 48), line, font=_inter(36, 700), fill=t.text, anchor="ls")
+            d.text((left, y + h + 34 + i * 48), line, font=_nippo(36), fill=t.text, anchor="ls")
     h += 48 * len(lines) + 20
     h += _conditions(page, left, y + h, inner, card["groups"], draw)
     if card.get("more_ways"):
@@ -729,7 +727,7 @@ def _insight_card(page: _Page, x: float, y: float, card: dict, draw: bool) -> fl
         if draw:
             d.text(
                 (left, y + h + 34),
-                f"OR {n} more {'way' if n == 1 else 'ways'}: on the region page",
+                f"OR {n} more {'way' if n == 1 else 'ways'}: at the address below",
                 font=_inter(28, 600),
                 fill=t.text_2,
                 anchor="ls",
@@ -792,13 +790,11 @@ def render_region_scenarios(
             return _scenario_card(scratch, 0, 0, card, mode, explain, False)
         return _insight_card(scratch, 0, 0, card, False)
 
-    content_top = _strip(
-        scratch, _header(scratch, name, subtitle, ["1 of 2", f"{MODE_LABELS[mode]} odds"]), payload, mode
-    )
+    content_top = _strip(scratch, _header(scratch, name, subtitle, ["1 of 2"]), payload, mode)
     if intro:
         content_top += 40 + 44 * len(_wrap(scratch.draw, intro, _inter(32, 500), SIZE[0] - 2 * PAD))
     content_top += 36
-    room = _footer(scratch, stamp) - 20 - content_top
+    room = _footer(scratch, stamp) - 20 - LINK_H - content_top
 
     # Every card at a height that fits a page: a card taller than a page keeps its first ways and says how
     # many more there are (nothing is cut mid-way). Each with its height with and without its explanation.
@@ -853,7 +849,7 @@ def render_region_scenarios(
         page = _Page.new(theme, teams)
         total = len(shown_pages)
         right = [f"{n} of {total}"] if total > 1 else []
-        top = _header(page, name, subtitle, [*right, f"{MODE_LABELS[mode]} odds"])
+        top = _header(page, name, subtitle, right)
         top = _strip(page, top, payload, mode)
         if intro:
             for line in _wrap(page.draw, intro, _inter(32, 500), SIZE[0] - 2 * PAD):
@@ -873,13 +869,18 @@ def render_region_scenarios(
                 else:
                     _boxed(page, x, y, h, lambda c=card, x=x, y=y: _insight_card(page, x, y, c, True))
                 y += h + COL_GAP
-        if n == len(shown_pages) and more:
-            page.draw.text(
-                (PAD, bottom - 10),
-                f"+{more} more at {SITE_HOST}{region_path(clazz, region)}",
-                font=_inter(34, 600),
-                fill=page.t.text,
-                anchor="ls",
-            )
+        # Where the rest is, once per page rather than in each card: the region page's address.
+        lead = (
+            f"+{more} more, and every scenario with why"
+            if n == len(shown_pages) and more
+            else "Every scenario, and why"
+        )
+        page.draw.text(
+            (PAD, bottom - 10),
+            f"{lead}: {SITE_HOST}{region_path(clazz, region)}",
+            font=_inter(32, 600),
+            fill=page.t.text,
+            anchor="ls",
+        )
         images.append(page.img)
     return images

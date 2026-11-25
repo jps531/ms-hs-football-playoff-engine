@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import math
 
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from backend.helpers import region_map
 from backend.helpers.region_map_image import (
@@ -48,7 +48,7 @@ from backend.helpers.region_pages import (
     schools_count,
 )
 from backend.helpers.region_timeline_image import WIDTH, _cells, _sizes, cycle_label, grid, span_line
-from backend.helpers.share_cards import SITE_HOST, _inter, _nippo, fit
+from backend.helpers.share_cards import _inter, _nippo, brand_lockup, fit, smooth_draw
 
 # The site's green (app.css --brand-700 light, --brand-400 dark) and how much of it each shade on the
 # statewide map has (.county-shade--1..4; 0 is the land's own color).
@@ -92,7 +92,7 @@ def draw_county_mark(page: _Page, county: str, x: float, mid: float, size: int, 
     big = size * k
     frame = _Frame((big * 0.06, big * 0.06, big * 0.94, big * 0.94), bounds=geom.bounds)
     layer = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    d = ImageDraw.Draw(layer)
+    d = smooth_draw(layer)
     fill = color or BRAND[page.theme]
     edge = _blend(page.t.bg, page.t.text, 0.45)
     for poly in _polygons(geom):
@@ -237,7 +237,7 @@ def render_county(county: str, seasons: list[int], schools: list[dict], theme: s
     top, bottom = PAD + 290, SIZE[1] - PAD - 110
     box = (PAD - 20, top, MAP_RIGHT, bottom)
     page.img.paste(county_map(theme, county, schools, (box[2] - box[0], box[3] - box[1]), 32, 26), box[:2])
-    page.d = ImageDraw.Draw(page.img)
+    page.d = smooth_draw(page.img)
     d, t = page.d, page.t
     shades = place_shades(theme, mine)
     classes = sorted({s["class"] for s in mine}, reverse=True)
@@ -293,7 +293,7 @@ def render_county_compared(county: str, older: dict, newer: dict, theme: str) ->
             page.img.paste(county_map(theme, county, side["schools"], (w, map_h), 28, 22), (x0, top + 130))
         else:
             d.text((x0, top + 200), "No MHSAA school", font=_inter(36, 500), fill=t.text_2, anchor="ls")
-    page.d = ImageDraw.Draw(page.img)
+    page.d = smooth_draw(page.img)
     d = page.d
     detail = {
         "in": lambda r: f"{place(r['newer'])} · {r['note']}",
@@ -380,8 +380,8 @@ def render_county_timeline(county: str, cycles: list[dict], theme: str) -> list[
             pill = max(14, round(width / 22))
             page.img.paste(county_map(theme, county, cycle["schools"], size, 0, pill), (round(x), round(y)))
         else:
-            ImageDraw.Draw(page.img).rectangle((x, y, x + width, y + map_h), outline=t.rule, width=2)
-        dd = ImageDraw.Draw(page.img)
+            smooth_draw(page.img).rectangle((x, y, x + width, y + map_h), outline=t.rule, width=2)
+        dd = smooth_draw(page.img)
         base = y + map_h + 24 + big
         dd.text((x, base), cycle_label(cycle["seasons"]), font=_nippo(big), fill=t.text, anchor="ls")
         dd.text(
@@ -389,7 +389,7 @@ def render_county_timeline(county: str, cycles: list[dict], theme: str) -> list[
         )
 
     _cells(page, cycles, caption, draw_cell)
-    page.d = ImageDraw.Draw(page.img)
+    page.d = smooth_draw(page.img)
     page.footer()
     return [page.img]
 
@@ -478,8 +478,8 @@ def render_county_card(county: str, seasons: list[int], schools: list[dict]) -> 
     d.text((CARD_PAD, CARD_PAD + 520), seasons_line(seasons), font=_inter(50, 500), fill=t.text_2, anchor="ls")
     box = (CARD[0] - CARD_PAD - 760, 70, CARD[0] - CARD_PAD + 20, CARD[1] - 70)
     page.img.paste(county_map("dark", county, schools, (box[2] - box[0], box[3] - box[1]), 32, 26), box[:2])
-    page.d = ImageDraw.Draw(page.img)
-    page.d.text((CARD_PAD, CARD[1] - CARD_PAD + 16), SITE_HOST, font=_inter(52, 600), fill=t.text, anchor="ls")
+    page.d = smooth_draw(page.img)
+    brand_lockup(page.img, "dark", CARD_PAD, CARD[1] - CARD_PAD + 16, 44, align="left")
     return _card(page)
 
 
@@ -491,5 +491,5 @@ def render_counties_card(seasons: list[int], counts: dict[str, int]) -> list[Ima
     d.text((CARD_PAD, CARD_PAD + 290), "by County", font=_nippo(140), fill=t.text, anchor="ls")
     d.text((CARD_PAD, CARD_PAD + 400), seasons_line(seasons), font=_inter(56, 600), fill=t.text_2, anchor="ls")
     _counties_map(page, _Frame((CARD[0] - CARD_PAD - 760, 70, CARD[0] - CARD_PAD + 20, CARD[1] - 70)), counts)
-    d.text((CARD_PAD, CARD[1] - CARD_PAD + 16), SITE_HOST, font=_inter(52, 600), fill=t.text, anchor="ls")
+    brand_lockup(page.img, "dark", CARD_PAD, CARD[1] - CARD_PAD + 16, 44, align="left")
     return _card(page)

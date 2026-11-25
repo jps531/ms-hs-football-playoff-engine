@@ -343,7 +343,7 @@ def build_share_assets(
             sitemap.append((region_path(clazz, region), r_as_of))
             written["regions"] += 1
             written["teams"] += _write_team_assets(
-                out_dir, site_url, clazz, region, payload, r_stamp, r_mode, r_as_of, card_jobs
+                out_dir, site_url, clazz, region, payload, r_stamp, r_mode, r_as_of, card_jobs, teams
             )
     # The front page, with the most open race as its live example. The app shows this same file at "/".
     summary = fetch(f"/standings/summary?season={season}")
@@ -850,6 +850,7 @@ def _write_bracket_assets(
                     "stamp": stamp,
                     "mode": mode,
                     "venue": venue,
+                    "look": (teams_by_school or {}).get(team["school"]),
                 },
             )
         )
@@ -1092,9 +1093,10 @@ def _write_team_assets(
     mode: str,
     as_of: date,
     jobs: list[ImageJob],
+    looks: dict | None = None,
 ) -> int:
     """Each team's card (added to *jobs*) and meta file for one region; removes ones for teams no longer
-    in it."""
+    in it. *looks* are the ``/teams`` entries by school, for the cards' helmets."""
     name = f"{clazz}-{region}"
     meta_dir = out_dir / "meta" / name
     og_dir = out_dir / "og" / name
@@ -1108,7 +1110,14 @@ def _write_team_assets(
             ImageJob(
                 f"og/{name}/{slug}.png",
                 TEAM_CARD,
-                {"clazz": clazz, "region": region, "team": team, "stamp": stamp, "mode": mode},
+                {
+                    "clazz": clazz,
+                    "region": region,
+                    "team": team,
+                    "stamp": stamp,
+                    "mode": mode,
+                    "look": (looks or {}).get(team["school"]),
+                },
             )
         )
         _write_text(
