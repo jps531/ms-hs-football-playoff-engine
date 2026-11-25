@@ -11,19 +11,19 @@ test("shareVersions: a Projected image only while there are Projected odds and t
   assert.deepEqual(shareVersions({ projectedAvailable: true, final: false, pastSeason: true }), ["blank"]);
 });
 
-test("shareDefaults: the half on screen, the page's odds (Toss-up has no image: blank), its theme", () => {
+test("shareDefaults: the whole bracket (whichever half is on screen), the page's odds (Toss-up has no image: blank), its theme", () => {
   const both = ["odds", "blank"];
-  assert.deepEqual(shareDefaults({ half: "N", mode: "projected", versions: both, dark: true }), { view: "north", version: "odds", theme: "dark" });
-  assert.deepEqual(shareDefaults({ half: "S", mode: "tossup", versions: both, dark: false }), { view: "south", version: "blank", theme: "light" });
+  assert.deepEqual(shareDefaults({ half: "N", mode: "projected", versions: both, dark: true }), { view: "all", version: "odds", theme: "dark" });
+  assert.deepEqual(shareDefaults({ half: "S", mode: "tossup", versions: both, dark: false }), { view: "all", version: "blank", theme: "light" });
   assert.deepEqual(shareDefaults({ half: "both", mode: "projected", versions: ["blank"], dark: false }), { view: "all", version: "blank", theme: "light" });
 });
 
 test("the image's address, file name and label", () => {
-  const c = { view: "north", version: "odds", theme: "dark" };
-  assert.equal(bracketImagePath(2026, 3, c), "/static/bracket/2026/3a-north-odds-dark.png");
-  assert.equal(bracketImageName(2026, 3, c), "class-3a-bracket-north-2026.png");
+  const c = { view: "all", version: "odds", theme: "dark" };
+  assert.equal(bracketImagePath(2026, 3, c), "/static/bracket/2026/3a-all-odds-dark.png");
+  assert.equal(bracketImageName(2026, 3, c), "class-3a-bracket-2026.png");
   assert.equal(bracketImageName(2025, 6, { view: "all", version: "blank" }), "class-6a-bracket-2025-blank.png");
-  assert.equal(bracketImageLabel(3, c), "Class 3A Bracket, North half, with Projected odds");
+  assert.equal(bracketImageLabel(3, c), "Class 3A Bracket, with Projected odds");
   assert.equal(bracketImageLabel(3, { view: "all", version: "blank" }), "Class 3A Bracket");
 });
 
@@ -106,4 +106,18 @@ test("a team's what-has-to-happen image: offered where it has pages, with its ow
   assert.equal(teamImagePath(2026, 3, 6, "Magee", { ...dark, image: "scenarios" }, 2, 2), "/static/region/2026/3a-6-team-magee-scenarios-projected-dark-2.png");
   assert.equal(teamImageName(2026, "Magee", { image: "scenarios", mode: "tossup" }, 2, 2), "magee-scenarios-2026-tossup-2.png");
   assert.equal(teamImageLabel(2026, "Magee", { image: "scenarios", mode: "projected" }), "What has to happen for Magee, with Projected odds");
+});
+
+test("a region's and a team's scenarios on one image, beside their pages", () => {
+  const index = {
+    scenarios: { "projected-light": 3 },
+    "scenarios-all": { "projected-light": 1 },
+    teams: { Magee: { season: { "projected-light": 1 }, "scenarios-all": { "projected-light": 1 } } },
+  };
+  const c = { image: "scenarios-all", mode: "projected", theme: "light" };
+  assert.deepEqual(regionImages(index, c).map((i) => i.key), ["scenarios", "scenarios-all"]);
+  assert.equal(regionImagePath(2026, 6, 2, c, 1, regionPages(index, c)), "/static/region/2026/6a-2-scenarios-all-projected-light.png");
+  assert.equal(regionImageLabel(6, 2, c), "Region 2-6A scenarios (one image), with Projected odds");
+  assert.deepEqual(teamImages(index, "Magee", c).map((i) => i.key), ["season", "scenarios-all"]);
+  assert.equal(teamImageLabel(2026, "Magee", c), "What has to happen for Magee, on one image, with Projected odds");
 });

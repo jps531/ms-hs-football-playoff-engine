@@ -5,6 +5,19 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.39.0
+
+Images to share:
+
+- **The bracket, upright:** the whole bracket is drawn 4:5, its north half over its south half, the
+  round names once between them and the championship game at the right: it reads in a post, where
+  the wide one didn't. It's the bracket's one image to share; its halves on their own aren't drawn.
+- **Scenarios on one image:** a region's scenarios, and a team's "What has to happen", can also be
+  shared as one image, every card whole in up to four columns, for opening full size. The pages stay.
+- The scenario pages show the standings in one column, beside the games left, on the first page
+  only, so the others have more room for cards; and they end in "View every scenario along with
+  explanations for each at" the region page's address, not "Why this order" in each card.
+
 ## 1.38.0
 
 Maps:

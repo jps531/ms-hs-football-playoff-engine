@@ -33,8 +33,10 @@ from pathlib import Path
 # image). A job names its renderer this way (not the function itself) so a worker process can import it.
 REGION_OVERVIEW = ("backend.helpers.region_image", "render_region_overview")
 REGION_SCENARIOS = ("backend.helpers.region_image", "render_region_scenarios")
+REGION_SCENARIOS_ALL = ("backend.helpers.region_image", "render_region_scenarios_all")
 TEAM_SEASON = ("backend.helpers.team_image", "render_team_season")
 TEAM_SCENARIOS = ("backend.helpers.team_image", "render_team_scenarios")
+TEAM_SCENARIOS_ALL = ("backend.helpers.team_image", "render_team_scenarios_all")
 CLASS_REGIONS = ("backend.helpers.region_map_image", "render_class_regions")
 TEAM_REGION = ("backend.helpers.region_map_image", "render_team_region")
 TEAM_REGIONS_COMPARED = ("backend.helpers.region_map_image", "render_team_regions_compared")

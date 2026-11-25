@@ -227,3 +227,13 @@ def test_the_pipeline_draws_each_teams_what_has_to_happen_and_indexes_it(tmp_pat
         for j in _region_image_jobs(3, 6, 2026, payload, [], [], date(2026, 10, 9), date(2026, 10, 10), {}, {})
         if j.renderer == TEAM_SCENARIOS
     ]
+
+
+def test_what_has_to_happen_on_one_image():
+    """Every outcome whole on one image, a column for each (up to four); nothing when nothing's left."""
+    from backend.helpers.region_image import all_width
+    from backend.helpers.team_image import render_team_scenarios_all
+
+    (one,) = render_team_scenarios_all(3, 6, 2026, _with_paths({1: 2, 2: 2}), "Raleigh", "x", "projected", "light")
+    assert one.width == all_width(2) and one.height >= SIZE[1] // 2
+    assert render_team_scenarios_all(3, 6, 2026, _with_paths({1: 1}), "Seminary", "x", "tossup") == []

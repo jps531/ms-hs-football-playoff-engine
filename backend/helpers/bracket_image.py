@@ -51,7 +51,7 @@ from backend.helpers.static_pages import (
 )
 
 SQUARE = (2000, 2000)  # one half
-WIDE = (3600, 2025)  # both halves, 16:9
+PORTRAIT = (2160, 2700)  # both halves, one over the other, 4:5: the image to share
 MODE = "projected"  # the odds version is Projected only
 
 
@@ -381,14 +381,17 @@ def render_bracket_image(
     t = THEMES[theme]
     final = is_final(games, results)
     blank = blank or final
-    size = WIDE if view == "all" else SQUARE
+    size = PORTRAIT if view == "all" else SQUARE
     pad = 72
     img = Image.new("RGB", size, t.bg)
     draw = smooth_draw(img)
     title = f"{season} Class {clazz}A Bracket" + ("" if view == "all" else f" · {HALF_NAMES.get(view, view)}")
     top = _header(draw, t, pad, title, _subtitle(final, blank, has_open_spots(games, results, seeds, view)))
     bottom = _footer(draw, t, size, pad, stamp)
-    _body(img, t, pad, top, bottom, games, results, seeds, view, blank, teams, venue, projected_line=True)
+    if view == "all":
+        _portrait_body(img, t, pad, top + 20, bottom, games, results, seeds, blank, teams, venue)
+    else:
+        _body(img, t, pad, top, bottom, games, results, seeds, view, blank, teams, venue, projected_line=True)
     return img
 
 
@@ -406,9 +409,11 @@ def _body(
     teams: dict | None,
     venue: dict | None,
     projected_line: bool,
+    labels: bool = True,
 ) -> None:
-    """The bracket itself between *top* and *bottom*: round labels, cards, connectors, and under the
-    championship game its venue and the champion (or, when *projected_line*, the projected one)."""
+    """The bracket itself between *top* and *bottom*: round labels (unless not *labels*: the room's kept),
+    cards, connectors, and under the championship game its venue and the champion (or, when
+    *projected_line*, the projected one)."""
     size = img.size
     draw = smooth_draw(img)
     picks = {} if blank else picks_for(games, results)
@@ -441,7 +446,8 @@ def _body(
         mirrored = view == "all" and h == "S"
         for k, games_k in enumerate(rs):
             x = column_x(h, k)
-            _label(draw, t, games_k[0]["round"], x, card_w, top + 30, label_font)
+            if labels:
+                _label(draw, t, games_k[0]["round"], x, card_w, top + 30, label_font)
             for i, g in enumerate(games_k):
                 paint.card(g, x, centers[k][i], _rows(g, results, seeds, picks, blank))
                 if k + 1 < len(rs):
@@ -462,31 +468,103 @@ def _body(
                 paint.join(sx, sy, x + card_w, cy)
             else:
                 paint.join(sx + card_w, sy, x, cy)
-        # Under the card: where it's played, then the champion (or, in the projected image, the
-        # projected one), each line centered on the card.
-        base = cy + paint.h / 2
-        where = venue_name(venue)
-        if where:
-            font = _inter(24, 500)
-            text = fit(draw, where, font, card_w + gap)
-            draw.text(
-                (x + (card_w - draw.textlength(text, font=font)) / 2, base + 42),
-                text,
-                font=font,
-                fill=t.text_2,
-                anchor="ls",
-            )
-            base += 40
-        champion = (results.get("final") or {}).get("winner")
-        if champion:
-            cup = trophy(TROPHY_H)
-            img.paste(cup, (round(x + (card_w - cup.width) / 2), round(cy - paint.h / 2 - 32 - cup.height)), cup)
-            font = _inter(30, 600)
-            text = fit(draw, f"Champion: {champion}", font, card_w + gap)
-            tw = draw.textlength(text, font=font)
-            draw.text((x + (card_w - tw) / 2, base + 50), text, font=font, fill=t.text, anchor="ls")
-        elif projected_line and not blank and (champ := projected_champion(final_game, None)):
-            _projected_champion(draw, t, champ, x, card_w + gap, base + 50, card_w)
+        _under_final(img, draw, t, paint, final_game, results, x, cy, card_w, gap, venue, projected_line and not blank)
+
+
+def _under_final(
+    img,
+    draw,
+    t: Theme,
+    paint,
+    final_game: dict,
+    results: dict,
+    x: float,
+    cy: float,
+    card_w: float,
+    gap: float,
+    venue: dict | None,
+    projected_line: bool,
+) -> None:
+    """Under the championship game's card at (*x*, *cy*): where it's played, then the champion (its trophy
+    over the card), or with *projected_line* the projected one, each line centered on the card."""
+    base = cy + paint.h / 2
+    where = venue_name(venue)
+    if where:
+        font = _inter(24, 500)
+        text = fit(draw, where, font, card_w + gap)
+        draw.text(
+            (x + (card_w - draw.textlength(text, font=font)) / 2, base + 42),
+            text,
+            font=font,
+            fill=t.text_2,
+            anchor="ls",
+        )
+        base += 40
+    champion = (results.get("final") or {}).get("winner")
+    if champion:
+        cup = trophy(TROPHY_H)
+        img.paste(cup, (round(x + (card_w - cup.width) / 2), round(cy - paint.h / 2 - 32 - cup.height)), cup)
+        font = _inter(30, 600)
+        text = fit(draw, f"Champion: {champion}", font, card_w + gap)
+        tw = draw.textlength(text, font=font)
+        draw.text((x + (card_w - tw) / 2, base + 50), text, font=font, fill=t.text, anchor="ls")
+    elif projected_line and (champ := projected_champion(final_game, None)):
+        _projected_champion(draw, t, champ, x, card_w + gap, base + 50, card_w)
+
+
+def _portrait_body(
+    img: Image.Image,
+    t: Theme,
+    pad: int,
+    top: float,
+    bottom: float,
+    games: list[dict],
+    results: dict,
+    seeds: dict,
+    blank: bool,
+    teams: dict | None,
+    venue: dict | None,
+) -> None:
+    """The whole bracket upright, for a post: the north half over the south half, each reading left to
+    right, one row of round names between them, and the championship game in a column of its own at
+    the right, between the two halves' semifinals."""
+    draw = smooth_draw(img)
+    gap, mid = 56, 64  # between columns; the round names' row between the halves
+    depth = max(len(_half_rounds(games, h)) for h in "NS")
+    if not depth:
+        return
+    card_w = (img.width - 2 * pad - gap * depth) / (depth + 1)
+    half_w = round(img.width - card_w - gap)
+    labels_h = 44  # each half's own row of round names, left out: the halves keep its room, so less of it
+    half_h = (bottom - top - mid + 2 * labels_h) / 2
+    semis = []
+    for i, h in enumerate("NS"):
+        if not _half_rounds(games, h):
+            continue
+        part = Image.new("RGB", (half_w, round(half_h)), t.bg)
+        _body(part, t, pad, 0, half_h, games, results, seeds, h, blank, teams, None, False, labels=False)
+        y0 = round(top - labels_h + i * (half_h - labels_h + mid))
+        img.paste(part.crop((0, labels_h, half_w, round(half_h))), (0, y0 + labels_h))
+        semis.append(y0 + _centers(_half_rounds(games, h), labels_h, half_h - labels_h)[-1][0])
+    label_font = _nippo(28)
+    names_base = top - labels_h + half_h + mid / 2 + 10
+    for k, games_k in enumerate(next((r for h in "NS" if (r := _half_rounds(games, h))), [])):
+        _label(draw, t, games_k[0]["round"], pad + k * (card_w + gap), card_w, names_base, label_font)
+    final_game = next((g for g in games if g["id"] == "final"), None)
+    if not final_game:
+        return
+    first = max(len(r[0]) for h in "NS" if (r := _half_rounds(games, h)))
+    paint = _Painter(img, card_w, min(64.0, (half_h - labels_h) / first * 0.4), t, teams or {})
+    x = half_w - pad + gap
+    cy = sum(semis) / len(semis)
+    # The round's name over its card, or over the trophy once it has a champion (_under_final).
+    above = cy - paint.h / 2 - (32 + TROPHY_H + 24 if (results.get("final") or {}).get("winner") else 30)
+    _label(draw, t, final_game["round"], x, card_w, above, _nippo(26))
+    picks = {} if blank else picks_for(games, results)
+    paint.card(final_game, x, cy, _rows(final_game, results, seeds, picks, blank))
+    for sy in semis:
+        paint.join(half_w - pad, sy, x, cy)
+    _under_final(img, draw, t, paint, final_game, results, x, cy, card_w, gap, venue, not blank)
 
 
 # ------------------------------------------------------------- link preview
