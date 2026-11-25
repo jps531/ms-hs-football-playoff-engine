@@ -13,24 +13,30 @@ from backend.api.models.responses import ClassHostingResponse, HostingResponse
 from backend.helpers.api_helpers import (
     ACTIVE_SCHOOL_FILTER,
     _compute_seed_atoms_if_pre_playoff,
-    _load_and_build_playoff_bracket_state,
     _load_elo_ratings,
     _load_format_slots,
+    _seed_odds,
     _unpack_hosting_odds_row,
+    as_standings_odds,
     attach_hosting_scenarios,
     build_hosting_entries,
     build_seeding_by_region,
+    class_team_odds,
     filter_to_team_or_404,
     has_displayable_scenarios,
+    hosting_entries_from_class,
     load_active_region_teams,
+    load_class_bracket_inputs,
     load_completed_region_games,
     load_other_region_seeding,
     resolve_remaining_games,
     results_to_applied,
     select_sentinel_region,
     today,
+    what_if_results,
 )
-from backend.helpers.data_classes import MatchupProbFn, StandingsOdds, StoredHostingOdds
+from backend.helpers.bracket_matchups import forced_wins
+from backend.helpers.data_classes import StandingsOdds, StoredHostingOdds
 from backend.helpers.scenario_updater import apply_region_game_results, merge_applied_results
 from backend.helpers.scenario_viewer import build_scenario_atoms
 from backend.helpers.win_probability import EloConfig, make_matchup_prob_fn
@@ -185,7 +191,7 @@ async def get_class_hosting(
     for region in sorted(all_loaded):
         region_odds, home_p_host_given_reach, home_p_host_given_reach_w, stored_adv, stored_adv_w = all_loaded[region]
         entries = build_hosting_entries(
-            region_odds, slots, region, season, clazz,
+            region_odds, clazz,
             stored=StoredHostingOdds(
                 given_reach=home_p_host_given_reach,
                 given_reach_weighted=home_p_host_given_reach_w,
@@ -229,7 +235,7 @@ async def get_hosting(
             seed_atoms, _ = await _compute_seed_atoms_if_pre_playoff(conn, season, clazz, region, as_of)
 
     entries = build_hosting_entries(
-        region_odds, slots, region, season, clazz,
+        region_odds, clazz,
         stored=StoredHostingOdds(
             given_reach=home_p_host_given_reach,
             given_reach_weighted=home_p_host_given_reach_w,
@@ -294,42 +300,25 @@ async def simulate_class_hosting(
 
         elo_ratings = await _load_elo_ratings(conn, season, as_of)
 
-        all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None
-        cross_region_wins: dict[tuple[int, int], int] | None = None
         odds_by_region: dict[int, dict[str, StandingsOdds]] = {}
-        wins_by_team: dict[str, int] = {}
-        matchup_fn_by_region: dict[int, MatchupProbFn | None] = {}
-        eliminated_hosting_map: dict[str, tuple] = {}
         seed_atoms_by_region: dict[int, dict | None] = {}
 
         if not sentinel_remaining:
-            # Playoff mode: delegate to shared bracket-state builder.
-            state = await _load_and_build_playoff_bracket_state(
-                conn, season, clazz, as_of, body.results, elo_ratings, slots
+            # Playoff mode: the stored seeds and results, with the what-ifs added.
+            c = await load_class_bracket_inputs(conn, season, clazz, as_of)
+            what_ifs = what_if_results(body.results, c.odds_t)
+            tossup, projected = class_team_odds(
+                slots, season, c.odds_t, c.odds_w, c.matchup_fn, c.results, forced_wins(slots, what_ifs)
             )
-            if state is None:
+            # The playoff teams, at their seeds.
+            odds_by_region = {
+                r: {t: o for t, o in teams.items() if o.p_playoffs > 0}
+                for r, teams in as_standings_odds(c.odds_t).items()
+            }
+            if not any(odds_by_region.values()):
                 raise HTTPException(status_code=404, detail=f"No clinched seeds for {clazz}A season {season}")
-            all_region_odds = state.all_region_odds
-            cross_region_wins = state.cross_region_wins
-            wins_by_team = state.wins_by_team
-            eliminated_hosting_map = state.eliminated_hosting_map
-            odds_by_region = dict(state.all_region_odds)
-            matchup_fn_by_region = dict.fromkeys(odds_by_region, state.matchup_fn)
         else:
-            # Regular-season mode: per-region simulation.
-            db_seeding_rows = await conn.execute(
-                """
-                SELECT DISTINCT ON (school) school, region, odds_1st, odds_2nd, odds_3rd, odds_4th
-                FROM region_standings
-                WHERE season = %s AND class = %s AND as_of_date <= %s"""
-                + ACTIVE_SCHOOL_FILTER
-                + """
-                ORDER BY school, as_of_date DESC
-                """,
-                (season, clazz, as_of),
-            )
-            all_db_seeding: list[tuple] = [(r[0], r[1], r[2], r[3], r[4], r[5]) async for r in db_seeding_rows]
-
+            # Regular-season mode: every region's games simulated.
             results_by_region: dict[int, list[GameResultRequest]] = {}
             for gr in _to_school_only_results(body.results):
                 reg = school_to_region.get(gr.winner) or school_to_region.get(gr.loser)
@@ -344,27 +333,19 @@ async def simulate_class_hosting(
                 _, odds_map = apply_region_game_results(reg_teams, completed, reg_remaining, reg_new_results)
                 odds_by_region[reg] = odds_map
 
-                other_seeding = [(s, r2, p1, p2, p3, p4) for s, r2, p1, p2, p3, p4 in all_db_seeding if r2 != reg]
-                seeding_by_region = build_seeding_by_region(reg, odds_map, other_seeding)
-                matchup_fn_by_region[reg] = make_matchup_prob_fn(elo_ratings, seeding_by_region, EloConfig()) if elo_ratings else None
-
                 if include_scenarios:
                     scenario_completed, scenario_remaining = merge_applied_results(completed, reg_remaining, reg_new_results)
                     if has_displayable_scenarios(scenario_remaining):
                         seed_atoms_by_region[reg] = build_scenario_atoms(reg_teams, scenario_completed, scenario_remaining)
 
+            # Every region's simulated seeding, worked out for the whole class.
+            fn = make_matchup_prob_fn(elo_ratings, odds_by_region, EloConfig()) if elo_ratings else None
+            tossup, projected = class_team_odds(slots, season, _seed_odds(odds_by_region), None, fn)
+
     region_responses = []
     for reg in sorted(odds_by_region):
         reg_odds = odds_by_region[reg]
-        entries = build_hosting_entries(
-            reg_odds, slots, reg, season, clazz,
-            wins_confirmed=wins_by_team,
-            win_prob_fn_weighted=matchup_fn_by_region.get(reg),
-            region_odds_weighted=reg_odds,
-            all_region_odds=all_region_odds,
-            cross_region_wins=cross_region_wins,
-            eliminated_hosting=eliminated_hosting_map if eliminated_hosting_map else None,
-        )
+        entries = hosting_entries_from_class(reg_odds, tossup, projected, clazz)
         if include_scenarios:
             entries = attach_hosting_scenarios(
                 entries, reg_odds, slots, season, reg, seed_atoms=seed_atoms_by_region.get(reg)
@@ -400,45 +381,29 @@ async def simulate_hosting(
         new_results = results_to_applied(_to_school_only_results(body.results))
 
         elo_ratings = await _load_elo_ratings(conn, season, as_of)
-
-        all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None
-        cross_region_wins: dict[tuple[int, int], int] | None = None
-        wins_by_team: dict[str, int] = {}
-        eliminated_hosting_map: dict[str, tuple] = {}
         scenario_completed, scenario_remaining = completed, remaining
 
         if not remaining:
-            # Playoff mode: delegate to shared bracket-state builder.
-            state = await _load_and_build_playoff_bracket_state(
-                conn, season, clazz, as_of, body.results, elo_ratings, slots
+            # Playoff mode: the stored seeds and results, with the what-ifs added.
+            c = await load_class_bracket_inputs(conn, season, clazz, as_of)
+            what_ifs = what_if_results(body.results, c.odds_t)
+            tossup, projected = class_team_odds(
+                slots, season, c.odds_t, c.odds_w, c.matchup_fn, c.results, forced_wins(slots, what_ifs)
             )
-            if state is None:
+            odds_map = {t: o for t, o in as_standings_odds(c.odds_t).get(region, {}).items() if o.p_playoffs > 0}
+            if not odds_map:
                 raise HTTPException(status_code=404, detail=f"No clinched seeds for {clazz}A region {region} season {season}")
-            all_region_odds = state.all_region_odds
-            cross_region_wins = state.cross_region_wins
-            wins_by_team = state.wins_by_team
-            eliminated_hosting_map = state.eliminated_hosting_map
-            odds_map = state.all_region_odds.get(region, {})
-            matchup_fn_w = state.matchup_fn
         else:
-            # Regular-season mode: simulate remaining region games.
+            # Regular-season mode: simulate remaining region games, the other regions as stored.
             scenario_completed, scenario_remaining = merge_applied_results(completed, remaining, new_results)
             _, odds_map = apply_region_game_results(teams, completed, remaining, new_results)
-            wins_by_team = {}
 
             other_region_rows = await load_other_region_seeding(conn, season, clazz, as_of, region)
             seeding_by_region = build_seeding_by_region(region, odds_map, other_region_rows)
-            matchup_fn_w = make_matchup_prob_fn(elo_ratings, seeding_by_region, EloConfig()) if elo_ratings else None
+            fn = make_matchup_prob_fn(elo_ratings, seeding_by_region, EloConfig()) if elo_ratings else None
+            tossup, projected = class_team_odds(slots, season, _seed_odds(seeding_by_region), None, fn)
 
-    entries = build_hosting_entries(
-        odds_map, slots, region, season, clazz,
-        wins_confirmed=wins_by_team,
-        win_prob_fn_weighted=matchup_fn_w,
-        region_odds_weighted=odds_map,
-        all_region_odds=all_region_odds,
-        cross_region_wins=cross_region_wins,
-        eliminated_hosting=eliminated_hosting_map if eliminated_hosting_map else None,
-    )
+    entries = hosting_entries_from_class(odds_map, tossup, projected, clazz)
     if include_scenarios:
         seed_atoms = (
             build_scenario_atoms(teams, scenario_completed, scenario_remaining)

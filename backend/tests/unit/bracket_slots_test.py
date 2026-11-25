@@ -1,14 +1,14 @@
-"""/bracket's per-slot odds while only some seeds are clinched: every slot stays, and the odds are the team pages'."""
+"""/bracket's per-slot odds while only some seeds are clinched: every slot stays, and the odds are the team pages'.
+
+Also POST /bracket/simulate's what-ifs, given by school or by slot.
+"""
 
 import pytest
 
-from backend.helpers.api_helpers import (
-    build_bracket_entries,
-    build_playoff_bracket_state,
-    compute_bracket_advancement_odds,
-    with_open_slots,
-)
+from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
+from backend.helpers.api_helpers import class_bracket_entries, what_if_results
 from backend.helpers.bracket_home_odds import equal_matchup_prob
+from backend.helpers.bracket_matchups import forced_wins, slot_playoff_odds, team_playoff_odds
 from backend.helpers.data_classes import StandingsOdds
 from backend.tests.data.playoff_brackets_2025 import SLOTS_5A_7A_2025
 
@@ -59,80 +59,105 @@ def _lopsided(home_region: int, home_seed: int, away_region: int, away_seed: int
     return 1.0 / (1.0 + 10 ** (-(strength(home_region, home_seed) - strength(away_region, away_seed)) / 10))
 
 
-def test_open_seeds_get_a_slot_and_clinched_ones_keep_their_team():
-    state = build_playoff_bracket_state(CLINCHED, {}, set(), [], {}, SLOTS_5A_7A_2025, 2025, 5)
-    filled = with_open_slots(state.all_region_odds, BY_REGION, CLINCHED)
-    assert sorted(filled[1]) == ["Alpha", "R1S2", "R1S3", "R1S4"]
-    assert sorted(filled[3]) == ["India", "Juliet", "Kilo", "Lima"]  # settled: nothing added
-    assert sorted(filled[2]) == ["R2S1", "R2S2", "R2S3", "R2S4"]
-    assert filled[1]["R1S3"].p3 == 1.0 and filled[1]["R1S3"].p1 == 0.0
-    # A seed no team can take (a region too small for it) gets no slot.
-    small = {5: {"Romeo": _team("Romeo", (0.5, 0.5, 0.0, 0.0)), "Sierra": _team("Sierra", (0.5, 0.5, 0.0, 0.0))}}
-    assert sorted(with_open_slots({}, small, {})[5]) == ["R5S1", "R5S2"]
+def _seeds(by_region: dict[int, dict[str, StandingsOdds]]) -> dict[int, dict[str, dict[int, float]]]:
+    """region -> team -> {seed: p}."""
+    return {r: {t: {1: o.p1, 2: o.p2, 3: o.p3, 4: o.p4} for t, o in teams.items()} for r, teams in by_region.items()}
 
 
 @pytest.mark.parametrize("win_prob_fn", [equal_matchup_prob, _lopsided], ids=["toss-up", "uneven"])
 def test_every_slot_is_listed_and_adds_up_to_each_teams_own_odds(win_prob_fn):
-    """With only some seeds clinched, the slots still cover the bracket, and a team's chances summed over
-    its seed odds are what compute_bracket_advancement_odds (the team pages' bracket_odds) gives it."""
-    state = build_playoff_bracket_state(CLINCHED, {}, set(), [], {}, SLOTS_5A_7A_2025, 2025, 5)
-    entries = build_bracket_entries(
+    """With only some seeds clinched, every slot some team can take is listed (a clinched one names its
+    team), and a team's chances summed over its seed odds are its bracket_odds (team_playoff_odds)."""
+    seeds = _seeds(BY_REGION)
+    entries = class_bracket_entries(
         BY_REGION,
-        SLOTS_5A_7A_2025,
-        season=2025,
+        slot_playoff_odds(SLOTS_5A_7A_2025, 2025, seeds, equal_matchup_prob),
+        slot_playoff_odds(SLOTS_5A_7A_2025, 2025, seeds, win_prob_fn),
         clazz=5,
-        win_prob_fn_weighted=win_prob_fn,
-        wins_by_team=state.wins_by_team,
-        all_region_odds=with_open_slots(state.all_region_odds, BY_REGION, CLINCHED),
-        cross_region_wins=state.cross_region_wins,
-        eliminated_hosting=state.eliminated_hosting_map,
-        school_to_seed=state.school_to_seed,
     )
     slots = {(e.region, e.seed): e for e in entries}
     assert len(slots) == 16
     assert slots[(1, 1)].school == "Alpha" and slots[(1, 2)].school is None
+    own = team_playoff_odds(SLOTS_5A_7A_2025, 2025, seeds, win_prob_fn)
     for region, teams in BY_REGION.items():
-        own = compute_bracket_advancement_odds(region, teams, SLOTS_5A_7A_2025, win_prob_fn=win_prob_fn)
         for name, o in teams.items():
             seed_p = {1: o.p1, 2: o.p2, 3: o.p3, 4: o.p4}
+            mine = own.get(name)
             for rd in ROUNDS:
+                expected = (mine.champion if rd == "champion" else mine.reach.get(rd, 0.0)) if mine else 0.0
                 summed = sum(p * getattr(slots[(region, s)], f"{rd}_weighted") for s, p in seed_p.items() if p)
-                assert summed == pytest.approx(getattr(own[name], rd), abs=1e-9), (name, rd)
+                assert summed == pytest.approx(expected, abs=1e-9), (name, rd)
 
 
-def test_a_simulated_win_for_an_open_seed_counts_once_some_seeds_are_clinched():
-    """POST /bracket/simulate with some seeds clinched: a result given by an open seed's slot counts as that
-    slot's win (as before any seed is clinched), instead of being dropped with the slot."""
-    from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
-    from backend.helpers.api_helpers import build_slot_win_counts
-
+def _first_slot_with(position: tuple[int, int]):
+    """The 5A-7A first-round slot *position* plays in, and its opponent there."""
     first = next(
-        s for s in SLOTS_5A_7A_2025 if (s.home_region, s.home_seed) == (2, 1) or (s.away_region, s.away_seed) == (2, 1)
+        s for s in SLOTS_5A_7A_2025 if position in ((s.home_region, s.home_seed), (s.away_region, s.away_seed))
     )
-    other = (
-        (first.away_region, first.away_seed)
-        if (first.home_region, first.home_seed) == (2, 1)
-        else (first.home_region, first.home_seed)
-    )
+    home = (first.home_region, first.home_seed)
+    return first, (first.away_region, first.away_seed) if home == position else home
+
+
+def test_a_what_if_by_slot_for_an_open_seed_counts():
+    """A result given by an open seed's slot counts as that slot's win: it's sure of the quarterfinals,
+    its opponent is out, and a slot elsewhere is untouched."""
+    _, other = _first_slot_with((2, 1))
     results = [
         BracketGameResultRequest(
             winner=ParticipantRef(region=2, seed=1), loser=ParticipantRef(region=other[0], seed=other[1])
         )
     ]
-    state = build_playoff_bracket_state(CLINCHED, {}, set(), results, {}, SLOTS_5A_7A_2025, 2025, 5)
-    entries = build_bracket_entries(
-        BY_REGION,
-        SLOTS_5A_7A_2025,
-        season=2025,
-        clazz=5,
-        win_prob_fn_weighted=equal_matchup_prob,
-        wins_by_team=state.wins_by_team,
-        all_region_odds=with_open_slots(state.all_region_odds, BY_REGION, CLINCHED),
-        cross_region_wins=state.cross_region_wins,
-        eliminated_hosting=state.eliminated_hosting_map,
-        wins_by_slot=build_slot_win_counts(results),
-        school_to_seed=state.school_to_seed,
+    seeds = _seeds(BY_REGION)
+    what_ifs = what_if_results(results, seeds)
+    assert what_ifs == [((2, 1), other, None)]
+    by_slot = slot_playoff_odds(
+        SLOTS_5A_7A_2025, 2025, seeds, equal_matchup_prob, forced=forced_wins(SLOTS_5A_7A_2025, what_ifs)
     )
-    slots = {(e.region, e.seed): e for e in entries}
-    assert slots[(2, 1)].quarterfinals == pytest.approx(1.0)  # 5A-7A: a first-round win is a quarterfinal
-    assert slots[(1, 1)].quarterfinals == pytest.approx(0.5)  # untouched
+    assert by_slot[(2, 1)].reach["quarterfinals"] == pytest.approx(1.0)  # 5A-7A: a first-round win is a quarterfinal
+    assert by_slot[other].reach.get("quarterfinals", 0.0) == 0.0
+    assert by_slot[(1, 1)].reach["quarterfinals"] == pytest.approx(0.5)
+
+
+def test_a_what_if_by_school_places_a_clinched_team_and_keeps_a_real_result():
+    """A school is placed at the seed it has clinched (one without a clinched seed can't be placed), and
+    a game already played keeps its real result whatever a what-if says."""
+    seeds = _seeds(BY_REGION)
+    results = [BracketGameResultRequest(winner=ParticipantRef(school="India"), loser=ParticipantRef(school="Kilo"))]
+    what_ifs = what_if_results(results, seeds)
+    assert what_ifs == [((3, 1), (3, 3), None)]
+    unplaced = [BracketGameResultRequest(winner=ParticipantRef(school="Bravo"), round="quarterfinals")]
+    assert what_if_results(unplaced, seeds) == []
+
+    # India (3-1) lost its first-round game for real; a what-if saying it won changes nothing.
+    first, other = _first_slot_with((3, 1))
+    opponent = f"R{other[0]}S{other[1]}"
+    real = {r: dict(teams) for r, teams in seeds.items()}
+    real[other[0]] = {opponent: {other[1]: 1.0}}
+    played = [(opponent, "India")]
+    flipped = forced_wins(SLOTS_5A_7A_2025, [((3, 1), other, None)])
+    as_played = slot_playoff_odds(SLOTS_5A_7A_2025, 2025, real, equal_matchup_prob, played)
+    with_what_if = slot_playoff_odds(SLOTS_5A_7A_2025, 2025, real, equal_matchup_prob, played, flipped)
+    assert with_what_if[(3, 1)].reach.get("quarterfinals", 0.0) == 0.0
+    assert with_what_if[other].reach == as_played[other].reach
+
+
+def test_a_winner_only_what_if_wins_that_round_and_the_ones_before():
+    """Given only the round it won, the winner wins its games up to and including that one."""
+    forced = forced_wins(SLOTS_5A_7A_2025, [((3, 1), None, "quarterfinals")])
+    assert forced == {((3, 1), 0), ((3, 1), 1)}
+    seeds = _seeds(BY_REGION)
+    by_slot = slot_playoff_odds(SLOTS_5A_7A_2025, 2025, seeds, equal_matchup_prob, forced=forced)
+    assert by_slot[(3, 1)].reach["semifinals"] == pytest.approx(1.0)
+    assert by_slot[(3, 1)].reach["finals"] == pytest.approx(0.5)
+
+
+def test_a_what_if_across_halves_is_the_championship():
+    """Two positions from different halves meet in the championship: both won their halves."""
+    north = next(s for s in SLOTS_5A_7A_2025 if s.north_south == "N")
+    south = next(s for s in SLOTS_5A_7A_2025 if s.north_south == "S")
+    w, loser = (north.home_region, north.home_seed), (south.home_region, south.home_seed)
+    forced = forced_wins(SLOTS_5A_7A_2025, [(w, loser, None)])
+    assert forced == {(w, 0), (w, 1), (w, 2), (w, -1), (loser, 0), (loser, 1), (loser, 2)}
+    by_slot = slot_playoff_odds(SLOTS_5A_7A_2025, 2025, _seeds(BY_REGION), equal_matchup_prob, forced=forced)
+    assert by_slot[w].champion == pytest.approx(1.0)
+    assert by_slot[loser].reach["finals"] == pytest.approx(1.0) and by_slot[loser].champion == 0.0

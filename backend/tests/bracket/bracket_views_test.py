@@ -10,7 +10,11 @@ from itertools import permutations
 
 import pytest
 
-from backend.helpers.api_helpers import class_bracket_entries
+from backend.helpers.api_helpers import (
+    build_standings_bracket_home_odds,
+    class_bracket_entries,
+    hosting_entries_from_class,
+)
 from backend.helpers.bracket_home_odds import equal_matchup_prob
 from backend.helpers.bracket_matchups import (
     bracket_outlook,
@@ -145,3 +149,42 @@ def test_5a_7a_slots_have_no_second_round_and_unknown_seeds_no_school():
     assert all(e.hosting.second_round.p_host_overall is None for e in entries)
     assert all(e.quarterfinals_weighted is None for e in entries)  # no Projected odds given
     assert by_slot[(2, 1)].quarterfinals == pytest.approx(0.5)
+
+
+def test_simulated_hosting_and_standings_know_the_bye():
+    """The hosting simulation and the standings simulation read the same class bracket: the team
+    with a bye hosts no first-round game and is sure of the second round."""
+    odds = _locked_class(8, small=1)
+    slot = next(s for s in SLOTS_1A_4A_2025 if (s.away_region, s.away_seed) == (1, 4))
+    region = slot.home_region
+    lucky = f"R{region}S{slot.home_seed}"
+    standings = _standings(odds)
+    teams = team_playoff_odds(SLOTS_1A_4A_2025, SEASON, odds, equal_matchup_prob)
+    hosting = {e.school: e for e in hosting_entries_from_class(standings[region], teams, None, clazz=1)}
+    assert hosting[lucky].first_round.p_host_given_reach == 0.0
+    assert hosting[lucky].second_round.p_host_overall == pytest.approx(1.0)  # #1 seeds host the second round
+    assert hosting[lucky].first_round.p_host_given_reach_weighted is None  # no Projected odds given
+    home = f"R{region}S2"  # every #2 seed hosts its first-round game
+    assert any((s.home_region, s.home_seed) == (region, 2) for s in SLOTS_1A_4A_2025)
+    assert hosting[home].first_round.p_host_given_reach == pytest.approx(1.0)
+
+    sim = build_standings_bracket_home_odds(region, standings[region], standings, SLOTS_1A_4A_2025, SEASON, 1)
+    bracket, home_games = sim[lucky]
+    assert bracket.second_round == pytest.approx(1.0) and bracket.second_round_weighted == pytest.approx(1.0)
+    assert home_games.first_round == 0.0
+    assert sim[home][0].second_round == pytest.approx(0.5)
+
+
+def test_5a_7a_simulated_hosting_has_no_second_round():
+    """5A-7A hosting entries leave the second round empty."""
+    odds = _locked_class(4)
+    entries = hosting_entries_from_class(
+        _standings(odds)[1], team_playoff_odds(SLOTS_5A_7A_2025, SEASON, odds, equal_matchup_prob), None, clazz=5
+    )
+    assert all(e.second_round.p_host_overall is None and e.second_round.p_host_given_reach is None for e in entries)
+    assert {e.school: e.first_round.p_host_given_reach for e in entries} == {
+        "R1S1": 1.0,
+        "R1S2": 1.0,
+        "R1S3": 0.0,
+        "R1S4": 0.0,
+    }

@@ -66,26 +66,27 @@ from backend.api.models.responses import (
     VenueModel,
 )
 from backend.helpers.bracket_home_odds import (
-    compute_bracket_advancement_odds,
-    compute_quarterfinal_home_odds,
-    compute_second_round_home_odds,
-    compute_semifinal_home_odds,
     equal_matchup_prob,
     half_slots_for_region,
     opponent_slot_indices,
     opponent_slots,
-    overall_home_odds,
     qf_home_team,
     r2_home_team,
     sf_home_team,
     slot_index_for,
     was_home_r1,
 )
-from backend.helpers.bracket_matchups import TeamPlayoffOdds, game_id_for, game_playoff_odds
+from backend.helpers.bracket_matchups import (
+    Position,
+    TeamPlayoffOdds,
+    game_id_for,
+    game_playoff_odds,
+    regions_needing_fallback,
+    team_playoff_odds,
+)
 from backend.helpers.certainty import CERTAIN_EPS
 from backend.helpers.data_classes import (
     AppliedGameResult,
-    BracketOdds,
     CompletedGame,
     FormatSlot,
     GameResult,
@@ -119,7 +120,7 @@ from backend.helpers.scenario_serializers import (
     serialize_condition,
 )
 from backend.helpers.scenario_viewer import _simplify_atom_list, build_scenario_atoms, team_atoms_from_scenarios
-from backend.helpers.scenarios import compute_first_round_home_odds, determine_odds, determine_scenarios
+from backend.helpers.scenarios import determine_odds, determine_scenarios
 from backend.helpers.tiebreak_explainer import explain_tiebreaks
 from backend.helpers.tiebreakers import resolve_standings_for_mask
 from backend.helpers.win_probability import (
@@ -1075,14 +1076,13 @@ def build_standings_bracket_home_odds(
     clazz: int,
     win_prob_fn_weighted: MatchupProbFn | None = None,
 ) -> dict[str, tuple[BracketAdvancementOdds, HomeGameOdds]]:
-    """Compute per-school bracket advancement + home-game odds for a standings simulate response.
+    """Per-school bracket advancement + home-game odds for a standings simulate response.
 
-    Mirrors the on-the-fly fallback branch of ``build_hosting_entries``, but every
-    underlying ``compute_*`` call is already keyed by school name (not bracket slot
-    ID) when *region_odds* is school-keyed, so no slot-to-school mapping is needed.
-    This is a regular-season what-if (hypothetical remaining-game results), not
-    mid-playoff bracket progress, so ``rounds_completed``/``wins_confirmed``/
-    ``cross_region_wins`` are left at their defaults.
+    A regular-season what-if: the region's simulated seeding (*region_odds*) with every other
+    region's (*all_region_odds*), worked out for the whole class from the bracket's own recursion
+    (``team_playoff_odds``), as the stored standings are. The Projected odds use
+    *win_prob_fn_weighted* on the same seeding, which is all a simulation of the region's games
+    gives.
 
     Returns ``{}`` when *slots*/*all_region_odds* are unavailable (e.g. no playoff
     format configured for the season/class) so callers can leave the fields null
@@ -1090,68 +1090,151 @@ def build_standings_bracket_home_odds(
     """
     if not slots or not all_region_odds:
         return {}
+    seeds = _seed_odds({**all_region_odds, region: region_odds})
+    tossup = team_playoff_odds(slots, season, seeds, equal_matchup_prob)
+    projected = team_playoff_odds(slots, season, seeds, win_prob_fn_weighted) if win_prob_fn_weighted else None
+    return standings_playoff_odds(region_odds, tossup, projected)
 
-    is_1a_4a = clazz <= 4
-    r1_home_seeds = frozenset(s.home_seed for s in slots if s.home_region == region)
 
-    adv = compute_bracket_advancement_odds(region, region_odds, slots)
-    r1_home = compute_first_round_home_odds(r1_home_seeds, region_odds)
-    r2_home = (
-        compute_second_round_home_odds(region, region_odds, slots, season, all_region_odds=all_region_odds)
-        if is_1a_4a
-        else {}
-    )
-    qf_home = compute_quarterfinal_home_odds(region, region_odds, slots, season, all_region_odds=all_region_odds)
-    sf_home = compute_semifinal_home_odds(region, region_odds, slots, season, all_region_odds=all_region_odds)
+def standings_playoff_odds(
+    region_odds: dict[str, StandingsOdds],
+    tossup: dict[str, TeamPlayoffOdds],
+    projected: dict[str, TeamPlayoffOdds] | None,
+) -> dict[str, tuple[BracketAdvancementOdds, HomeGameOdds]]:
+    """A region's ``bracket_odds`` and ``home_game_odds`` from the class's ``team_playoff_odds``, as
+    the pipeline stores them: hosting given reaching the round, the first round's given making the
+    playoffs (a bye isn't a home game). Without *projected*, the Projected odds are the Toss-up."""
+    none = TeamPlayoffOdds()
+    projected = projected if projected is not None else tossup
+    rounds = ("second_round", "quarterfinals", "semifinals", "finals")
+    out: dict[str, tuple[BracketAdvancementOdds, HomeGameOdds]] = {}
+    for school, o in region_odds.items():
+        t, w = tossup.get(school, none), projected.get(school, none)
+        made = o.p1 + o.p2 + o.p3 + o.p4
 
-    if win_prob_fn_weighted is not None:
-        adv_w = compute_bracket_advancement_odds(region, region_odds, slots, win_prob_fn=win_prob_fn_weighted)
-        r2_home_w = (
-            compute_second_round_home_odds(
-                region, region_odds, slots, season, win_prob_fn=win_prob_fn_weighted, all_region_odds=all_region_odds
+        def given(x: TeamPlayoffOdds, key: str) -> float:
+            """P(host | reach) for *x*, 0 when it can't reach the round."""
+            reach = made if key == "first_round" else x.reach.get(key, 0.0)
+            return min(1.0, x.host.get(key, 0.0) / reach) if reach > 0 else 0.0
+
+        hosting = ("first_round", "second_round", "quarterfinals", "semifinals")
+        out[school] = (
+            BracketAdvancementOdds(
+                **{k: t.reach.get(k, 0.0) for k in rounds},
+                champion=t.champion,
+                **{f"{k}_weighted": w.reach.get(k, 0.0) for k in rounds},
+                champion_weighted=w.champion,
+            ),
+            HomeGameOdds(
+                **{k: given(t, k) for k in hosting},
+                **{f"{k}_weighted": given(w, k) for k in hosting},
+            ),
+        )
+    return out
+
+
+def hosting_entries_from_class(
+    region_odds: dict[str, StandingsOdds],
+    tossup: dict[str, TeamPlayoffOdds],
+    projected: dict[str, TeamPlayoffOdds] | None,
+    clazz: int,
+) -> list[TeamHostingEntry]:
+    """``/hosting``'s entries for a region from the class's ``team_playoff_odds``.
+
+    Each round: P(hosts | reaches it), None when the team can't reach it, and P(reaches it and
+    hosts). The first round's is given making the playoffs, as the stored odds are (a bye isn't a
+    home game). 5A-7A have no second round. Weighted fields are None without *projected*.
+    """
+    none = TeamPlayoffOdds()
+    entries: list[TeamHostingEntry] = []
+    for school, o in region_odds.items():
+        made = o.p1 + o.p2 + o.p3 + o.p4
+
+        def round_odds(key: str, school: str = school, made: float = made) -> RoundHostingOdds:
+            """One round's hosting odds for *school*, both modes."""
+
+            def pair(x: TeamPlayoffOdds) -> tuple[float | None, float]:
+                reach = made if key == "first_round" else x.reach.get(key, 0.0)
+                host = x.host.get(key, 0.0)
+                return (min(1.0, host / reach) if reach > CERTAIN_EPS else None), host
+
+            given_t, overall_t = pair(tossup.get(school, none))
+            given_w, overall_w = pair(projected.get(school, none)) if projected is not None else (None, None)
+            return RoundHostingOdds(
+                p_host_given_reach=given_t,
+                p_host_overall=overall_t,
+                p_host_given_reach_weighted=given_w,
+                p_host_overall_weighted=overall_w,
             )
-            if is_1a_4a
-            else {}
-        )
-        qf_home_w = compute_quarterfinal_home_odds(
-            region, region_odds, slots, season, win_prob_fn=win_prob_fn_weighted, all_region_odds=all_region_odds
-        )
-        sf_home_w = compute_semifinal_home_odds(
-            region, region_odds, slots, season, win_prob_fn=win_prob_fn_weighted, all_region_odds=all_region_odds
-        )
-    else:
-        adv_w = r2_home_w = qf_home_w = sf_home_w = None
 
-    result: dict[str, tuple[BracketAdvancementOdds, HomeGameOdds]] = {}
-    for school in region_odds:
-        a = adv.get(school)
-        if a is None:
-            continue
-        a_w = adv_w.get(school) if adv_w else None
-        bracket_odds = BracketAdvancementOdds(
-            second_round=a.second_round,
-            quarterfinals=a.quarterfinals,
-            semifinals=a.semifinals,
-            finals=a.finals,
-            champion=a.champion,
-            second_round_weighted=a_w.second_round if a_w else a.second_round,
-            quarterfinals_weighted=a_w.quarterfinals if a_w else a.quarterfinals,
-            semifinals_weighted=a_w.semifinals if a_w else a.semifinals,
-            finals_weighted=a_w.finals if a_w else a.finals,
-            champion_weighted=a_w.champion if a_w else a.champion,
+        entries.append(
+            TeamHostingEntry(
+                school=school,
+                first_round=round_odds("first_round"),
+                second_round=(
+                    round_odds("second_round")
+                    if clazz <= 4
+                    else RoundHostingOdds(p_host_given_reach=None, p_host_overall=None)
+                ),
+                quarterfinals=round_odds("quarterfinals"),
+                semifinals=round_odds("semifinals"),
+            )
         )
-        home_game_odds = HomeGameOdds(
-            first_round=r1_home.get(school, 0.0),
-            second_round=r2_home.get(school, 0.0),
-            quarterfinals=qf_home.get(school, 0.0),
-            semifinals=sf_home.get(school, 0.0),
-            first_round_weighted=r1_home.get(school, 0.0),
-            second_round_weighted=(r2_home_w if r2_home_w is not None else r2_home).get(school, 0.0),
-            quarterfinals_weighted=(qf_home_w if qf_home_w is not None else qf_home).get(school, 0.0),
-            semifinals_weighted=(sf_home_w if sf_home_w is not None else sf_home).get(school, 0.0),
-        )
-        result[school] = (bracket_odds, home_game_odds)
-    return result
+    return entries
+
+
+def class_team_odds(
+    slots: list[FormatSlot],
+    season: int,
+    seeds_t: dict[int, dict[str, dict[int, float]]],
+    seeds_w: dict[int, dict[str, dict[int, float]]] | None,
+    win_prob_fn: MatchupProbFn | None,
+    results: Sequence[tuple[str, str]] = (),
+    forced: set[tuple[Position, int]] | None = None,
+) -> tuple[dict[str, TeamPlayoffOdds], dict[str, TeamPlayoffOdds] | None]:
+    """A class's (Toss-up, Projected) ``team_playoff_odds``; Projected is None without *win_prob_fn*.
+    *seeds_w* defaults to *seeds_t* (a simulation of region games gives only Toss-up seed odds)."""
+    tossup = team_playoff_odds(slots, season, seeds_t, equal_matchup_prob, results, forced or ())
+    projected = (
+        team_playoff_odds(slots, season, seeds_w or seeds_t, win_prob_fn, results, forced or ())
+        if win_prob_fn is not None
+        else None
+    )
+    return tossup, projected
+
+
+def what_if_results(
+    results: list[BracketGameResultRequest],
+    seed_odds: dict[int, dict[str, dict[int, float]]],
+) -> list[tuple[Position, Position | None, str | None]]:
+    """A simulation's results by bracket position: (winner, loser or None, round or None).
+
+    A participant given by (region, seed) is that position; one given by school is the position
+    it has clinched (a school without a clinched seed is left out, as it can't be placed). A game
+    already played keeps its real result: the bracket decides played games first.
+    """
+    holder: dict[str, Position] = {
+        team: (region, seed)
+        for region, teams in seed_odds.items()
+        for team, by in teams.items()
+        for seed, p in by.items()
+        if p >= CLINCHED_THRESHOLD
+    }
+
+    def position(ref: ParticipantRef | None) -> Position | None:
+        """Where *ref* is in the bracket, if known."""
+        if ref is None:
+            return None
+        if ref.region is not None and ref.seed is not None:
+            return (ref.region, ref.seed)
+        return holder.get(ref.school or "")
+
+    what_ifs: list[tuple[Position, Position | None, str | None]] = []
+    for r in results:
+        w, loser = position(r.winner), position(r.loser)
+        if w is not None and (r.loser is None or loser is not None):
+            what_ifs.append((w, loser, r.round))
+    return what_ifs
 
 
 # ---------------------------------------------------------------------------
@@ -1392,253 +1475,62 @@ async def _compute_seed_atoms_if_pre_playoff(
 
 def build_hosting_entries(
     region_odds: dict[str, StandingsOdds],
-    slots: list[FormatSlot],
-    region: int,
-    season: int,
     clazz: int,
-    stored: StoredHostingOdds | None = None,
-    rounds_completed: int = 0,
-    wins_confirmed: dict[str, int] | None = None,
-    win_prob_fn_weighted: MatchupProbFn | None = None,
-    region_odds_weighted: dict[str, StandingsOdds] | None = None,
-    all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None,
-    cross_region_wins: dict[tuple[int, int], int] | None = None,
-    eliminated_hosting: dict[str, tuple[float | None, float | None, float | None, float | None]] | None = None,
+    stored: StoredHostingOdds,
 ) -> list[TeamHostingEntry]:
-    """Compute per-round playoff hosting odds for all teams in a region.
+    """Per-round playoff hosting odds for every team in a region, read from its stored snapshot.
 
-    When *stored* is provided (GET endpoint), values are read directly from the
-    DB snapshot — this correctly reflects rounds already played and advancement
-    probabilities after each playoff round.
-
-    When not provided (simulate endpoint, unit tests), falls back to on-the-fly
-    computation from seeding odds.  R1 p_host_given_reach is 0.0 in the fallback path
-    since home-seed data is not available without a DB lookup.
-
-    *eliminated_hosting* overrides both paths for eliminated teams: supply a
-    ``(r1, r2, qf, sf)`` tuple of 1.0/0.0/None per team so that rounds they
-    actually played show a deterministic p_host_given_reach rather than null.
+    The stored odds are the class bracket's own (the pipeline's ``class_playoff_odds``), so they
+    reflect rounds already played and every team's chance to get there; a simulation works them
+    out the same way (``hosting_entries_from_class``). ``p_host_given_reach`` is None for a round
+    the team can't reach; ``p_host_overall`` is it times the chance of reaching the round (for
+    the first round, of making the playoffs).
 
     1A–4A have four hosting rounds; 5A–7A skip ``second_round`` (null).
     """
     is_1a_4a = clazz <= 4
-    use_stored = stored is not None
-
-    if not use_stored:
-        adv_odds = compute_bracket_advancement_odds(
-            region, region_odds, slots, rounds_completed=rounds_completed, wins_confirmed=wins_confirmed
-        )
-        qf_home = compute_quarterfinal_home_odds(
-            region,
-            region_odds,
-            slots,
-            season,
-            rounds_completed=rounds_completed,
-            wins_confirmed=wins_confirmed,
-            all_region_odds=all_region_odds,
-            cross_region_wins=cross_region_wins,
-        )
-        sf_home = compute_semifinal_home_odds(
-            region,
-            region_odds,
-            slots,
-            season,
-            rounds_completed=rounds_completed,
-            wins_confirmed=wins_confirmed,
-            all_region_odds=all_region_odds,
-            cross_region_wins=cross_region_wins,
-        )
-        r2_home_dict = (
-            compute_second_round_home_odds(
-                region,
-                region_odds,
-                slots,
-                season,
-                rounds_completed=rounds_completed,
-                wins_confirmed=wins_confirmed,
-                all_region_odds=all_region_odds,
-            )
-            if is_1a_4a
-            else {}
-        )
-        r1_home_seeds = {s.home_seed for s in slots if s.home_region == region}
-
-        if win_prob_fn_weighted is not None:
-            rw = region_odds_weighted if region_odds_weighted is not None else region_odds
-            adv_odds_w = compute_bracket_advancement_odds(
-                region,
-                rw,
-                slots,
-                win_prob_fn=win_prob_fn_weighted,
-                rounds_completed=rounds_completed,
-                wins_confirmed=wins_confirmed,
-            )
-            qf_home_w = compute_quarterfinal_home_odds(
-                region,
-                rw,
-                slots,
-                season,
-                win_prob_fn=win_prob_fn_weighted,
-                rounds_completed=rounds_completed,
-                wins_confirmed=wins_confirmed,
-                all_region_odds=all_region_odds,
-                cross_region_wins=cross_region_wins,
-            )
-            sf_home_w = compute_semifinal_home_odds(
-                region,
-                rw,
-                slots,
-                season,
-                win_prob_fn=win_prob_fn_weighted,
-                rounds_completed=rounds_completed,
-                wins_confirmed=wins_confirmed,
-                all_region_odds=all_region_odds,
-                cross_region_wins=cross_region_wins,
-            )
-            r2_home_dict_w: dict[str, float] = (
-                compute_second_round_home_odds(
-                    region,
-                    rw,
-                    slots,
-                    season,
-                    win_prob_fn=win_prob_fn_weighted,
-                    rounds_completed=rounds_completed,
-                    wins_confirmed=wins_confirmed,
-                    all_region_odds=all_region_odds,
-                )
-                if is_1a_4a
-                else {}
-            )
-        else:
-            adv_odds_w = qf_home_w = sf_home_w = None
-            r2_home_dict_w = {}
-
     entries = []
     for school, o in region_odds.items():
-        if o.eliminated and eliminated_hosting is not None and school in eliminated_hosting:
-            r1_det, r2_det, qf_det, sf_det = eliminated_hosting[school]
+        r1_given_reach, r2_given_reach, qf_given_reach, sf_given_reach = stored.given_reach.get(
+            school, (0.0, 0.0, 0.0, 0.0)
+        )
+        a_r1, a_r2, a_qf, a_sf = stored.advancement.get(school, (0.0, 0.0, 0.0, 0.0))
+        r1_given_reach_w, r2_given_reach_w, qf_given_reach_w, sf_given_reach_w = stored.given_reach_weighted.get(
+            school, (0.0, 0.0, 0.0, 0.0)
+        )
+        a_r1_w, a_r2_w, a_qf_w, a_sf_w = stored.advancement_weighted.get(school, (0.0, 0.0, 0.0, 0.0))
 
-            r1_odds = _det_round_hosting(r1_det)
-            r2_odds = (
-                _det_round_hosting(r2_det)
-                if is_1a_4a
-                else RoundHostingOdds(p_host_given_reach=None, p_host_overall=None)
-            )
-            qf_odds = _det_round_hosting(qf_det)
-            sf_odds = _det_round_hosting(sf_det)
-        elif use_stored:
-            assert stored is not None
-            r1_given_reach, r2_given_reach, qf_given_reach, sf_given_reach = stored.given_reach.get(
-                school, (0.0, 0.0, 0.0, 0.0)
-            )
-            a_r1, a_r2, a_qf, a_sf = stored.advancement.get(school, (0.0, 0.0, 0.0, 0.0))
-            r1_given_reach_w, r2_given_reach_w, qf_given_reach_w, sf_given_reach_w = stored.given_reach_weighted.get(
-                school, (0.0, 0.0, 0.0, 0.0)
-            )
-            a_r1_w, a_r2_w, a_qf_w, a_sf_w = stored.advancement_weighted.get(school, (0.0, 0.0, 0.0, 0.0))
-
-            r1_gate = o.p_playoffs > 0 or o.clinched
-            clinched_floor = 1.0 if o.clinched else 0.0
-            eff_a_r1 = a_r1 if a_r1 > 0 else clinched_floor
-            eff_a_r1_w = a_r1_w if a_r1_w > 0 else clinched_floor
-            r1_odds = RoundHostingOdds(
-                p_host_given_reach=r1_given_reach if r1_gate else None,
-                p_host_overall=r1_given_reach * eff_a_r1,
-                p_host_given_reach_weighted=r1_given_reach_w if r1_gate else None,
-                p_host_overall_weighted=r1_given_reach_w * eff_a_r1_w,
-            )
-            if is_1a_4a:
-                r2_odds = RoundHostingOdds(
-                    p_host_given_reach=r2_given_reach if a_r2 > 0 else None,
-                    p_host_overall=r2_given_reach * a_r2,
-                    p_host_given_reach_weighted=r2_given_reach_w if a_r2 > 0 else None,
-                    p_host_overall_weighted=r2_given_reach_w * a_r2_w,
-                )
-            else:
-                r2_odds = RoundHostingOdds(p_host_given_reach=None, p_host_overall=None)
-            qf_odds = RoundHostingOdds(
-                p_host_given_reach=qf_given_reach if a_qf > 0 else None,
-                p_host_overall=qf_given_reach * a_qf,
-                p_host_given_reach_weighted=qf_given_reach_w if a_qf > 0 else None,
-                p_host_overall_weighted=qf_given_reach_w * a_qf_w,
-            )
-            sf_odds = RoundHostingOdds(
-                p_host_given_reach=sf_given_reach if a_sf > 0 else None,
-                p_host_overall=sf_given_reach * a_sf,
-                p_host_given_reach_weighted=sf_given_reach_w if a_sf > 0 else None,
-                p_host_overall_weighted=sf_given_reach_w * a_sf_w,
+        r1_gate = o.p_playoffs > 0 or o.clinched
+        clinched_floor = 1.0 if o.clinched else 0.0
+        eff_a_r1 = a_r1 if a_r1 > 0 else clinched_floor
+        eff_a_r1_w = a_r1_w if a_r1_w > 0 else clinched_floor
+        r1_odds = RoundHostingOdds(
+            p_host_given_reach=r1_given_reach if r1_gate else None,
+            p_host_overall=r1_given_reach * eff_a_r1,
+            p_host_given_reach_weighted=r1_given_reach_w if r1_gate else None,
+            p_host_overall_weighted=r1_given_reach_w * eff_a_r1_w,
+        )
+        if is_1a_4a:
+            r2_odds = RoundHostingOdds(
+                p_host_given_reach=r2_given_reach if a_r2 > 0 else None,
+                p_host_overall=r2_given_reach * a_r2,
+                p_host_given_reach_weighted=r2_given_reach_w if a_r2 > 0 else None,
+                p_host_overall_weighted=r2_given_reach_w * a_r2_w,
             )
         else:
-            # On-the-fly fallback (simulate endpoint / unit tests).
-            adv = adv_odds.get(school)  # type: ignore[possibly-undefined]
-            qf_given_reach = qf_home.get(school, 0.0)  # type: ignore[possibly-undefined]
-            sf_given_reach = sf_home.get(school, 0.0)  # type: ignore[possibly-undefined]
-
-            adv_w = adv_odds_w.get(school) if adv_odds_w else None  # type: ignore[possibly-undefined]
-            qf_given_reach_w = qf_home_w.get(school, 0.0) if qf_home_w else 0.0  # type: ignore[possibly-undefined]
-            sf_given_reach_w = sf_home_w.get(school, 0.0) if sf_home_w else 0.0  # type: ignore[possibly-undefined]
-
-            r1_given_reach = sum(
-                getattr(o, f"p{seed}") * (1.0 if seed in r1_home_seeds else 0.0)  # type: ignore[possibly-undefined]
-                for seed in (1, 2, 3, 4)
-            )
-            if is_1a_4a:
-                r2_given_reach = r2_home_dict.get(school, 0.0)  # type: ignore[possibly-undefined]
-                p_r1_adv = adv.second_round if adv else 0.0
-                p_r2_adv = adv.quarterfinals if adv else 0.0
-                p_qf_adv = adv.semifinals if adv else 0.0
-                r2_given_reach_w = r2_home_dict_w.get(school, 0.0)  # type: ignore[possibly-undefined]
-                p_r1_adv_w = adv_w.second_round if adv_w else 0.0
-                p_r2_adv_w = adv_w.quarterfinals if adv_w else 0.0
-                p_qf_adv_w = adv_w.semifinals if adv_w else 0.0
-                r1_odds = RoundHostingOdds(
-                    p_host_given_reach=r1_given_reach if o.p_playoffs > 0 else None,
-                    p_host_overall=overall_home_odds(r1_given_reach, o.p_playoffs),
-                    p_host_given_reach_weighted=r1_given_reach if (o.p_playoffs > 0 and adv_w) else None,
-                    p_host_overall_weighted=overall_home_odds(r1_given_reach, o.p_playoffs) if adv_w else None,
-                )
-                r2_odds = RoundHostingOdds(
-                    p_host_given_reach=r2_given_reach / p_r1_adv if p_r1_adv > 0 else None,
-                    p_host_overall=r2_given_reach if p_r1_adv > 0 else 0.0,
-                    p_host_given_reach_weighted=r2_given_reach_w / p_r1_adv_w if p_r1_adv_w > 0 else None,
-                    p_host_overall_weighted=r2_given_reach_w if p_r1_adv_w > 0 else 0.0,
-                )
-                qf_odds = RoundHostingOdds(
-                    p_host_given_reach=qf_given_reach / p_r2_adv if p_r2_adv > 0 else None,
-                    p_host_overall=qf_given_reach if p_r2_adv > 0 else 0.0,
-                    p_host_given_reach_weighted=qf_given_reach_w / p_r2_adv_w if p_r2_adv_w > 0 else None,
-                    p_host_overall_weighted=qf_given_reach_w if p_r2_adv_w > 0 else 0.0,
-                )
-                sf_odds = RoundHostingOdds(
-                    p_host_given_reach=sf_given_reach / p_qf_adv if p_qf_adv > 0 else None,
-                    p_host_overall=sf_given_reach if p_qf_adv > 0 else 0.0,
-                    p_host_given_reach_weighted=sf_given_reach_w / p_qf_adv_w if p_qf_adv_w > 0 else None,
-                    p_host_overall_weighted=sf_given_reach_w if p_qf_adv_w > 0 else 0.0,
-                )
-            else:
-                p_qf_adv = adv.quarterfinals if adv else 0.0
-                p_sf_adv = adv.semifinals if adv else 0.0
-                p_qf_adv_w = adv_w.quarterfinals if adv_w else 0.0
-                p_sf_adv_w = adv_w.semifinals if adv_w else 0.0
-                r1_odds = RoundHostingOdds(
-                    p_host_given_reach=r1_given_reach if o.p_playoffs > 0 else None,
-                    p_host_overall=overall_home_odds(r1_given_reach, o.p_playoffs),
-                    p_host_given_reach_weighted=r1_given_reach if (o.p_playoffs > 0 and adv_w) else None,
-                    p_host_overall_weighted=overall_home_odds(r1_given_reach, o.p_playoffs) if adv_w else None,
-                )
-                r2_odds = RoundHostingOdds(p_host_given_reach=None, p_host_overall=None)
-                qf_odds = RoundHostingOdds(
-                    p_host_given_reach=qf_given_reach / p_qf_adv if p_qf_adv > 0 else None,
-                    p_host_overall=qf_given_reach if p_qf_adv > 0 else 0.0,
-                    p_host_given_reach_weighted=qf_given_reach_w / p_qf_adv_w if p_qf_adv_w > 0 else None,
-                    p_host_overall_weighted=qf_given_reach_w if p_qf_adv_w > 0 else 0.0,
-                )
-                sf_odds = RoundHostingOdds(
-                    p_host_given_reach=sf_given_reach / p_sf_adv if p_sf_adv > 0 else None,
-                    p_host_overall=sf_given_reach if p_sf_adv > 0 else 0.0,
-                    p_host_given_reach_weighted=sf_given_reach_w / p_sf_adv_w if p_sf_adv_w > 0 else None,
-                    p_host_overall_weighted=sf_given_reach_w if p_sf_adv_w > 0 else 0.0,
-                )
+            r2_odds = RoundHostingOdds(p_host_given_reach=None, p_host_overall=None)
+        qf_odds = RoundHostingOdds(
+            p_host_given_reach=qf_given_reach if a_qf > 0 else None,
+            p_host_overall=qf_given_reach * a_qf,
+            p_host_given_reach_weighted=qf_given_reach_w if a_qf > 0 else None,
+            p_host_overall_weighted=qf_given_reach_w * a_qf_w,
+        )
+        sf_odds = RoundHostingOdds(
+            p_host_given_reach=sf_given_reach if a_sf > 0 else None,
+            p_host_overall=sf_given_reach * a_sf,
+            p_host_given_reach_weighted=sf_given_reach_w if a_sf > 0 else None,
+            p_host_overall_weighted=sf_given_reach_w * a_sf_w,
+        )
         entries.append(
             TeamHostingEntry(
                 school=school,
@@ -1919,17 +1811,6 @@ def build_simulated_bracket_results(
     return simulated
 
 
-def build_slot_win_counts(results: list[BracketGameResultRequest]) -> dict[str, int]:
-    """Count wins per (region, seed) slot ID from ``POST /bracket/simulate`` results
-    (pre-clinching mode, where only slot refs — not school names — are meaningful)."""
-    slot_wins: dict[str, int] = {}
-    for r in results:
-        slot_id = _resolve_ref_to_slot_id(r.winner)
-        if slot_id:
-            slot_wins[slot_id] = slot_wins.get(slot_id, 0) + 1
-    return slot_wins
-
-
 # ---------------------------------------------------------------------------
 # Playoff bracket state helpers
 # ---------------------------------------------------------------------------
@@ -2038,7 +1919,7 @@ class PlayoffBracketState:
     game_venues: dict[frozenset, VenueModel]
 
 
-# Advancement round order for ceiling comparisons and _apply_round_ceilings.
+# Advancement round order, for comparing the round ceilings of winner-only results.
 _ROUND_ADVANCEMENT_ORDER = ["second_round", "quarterfinals", "semifinals", "finals", "champion"]
 # Hosting round order (no 'finals'/'champion' — championship has its own node).
 
@@ -3465,489 +3346,12 @@ def build_enriched_bracket_layout(
     return BracketLayout(halves=enriched_halves, championship=championship)
 
 
-# Advancement fields that should be zeroed for rounds strictly after the ceiling.
-_ADVANCEMENT_FIELDS_AFTER: dict[str, list[str]] = {
-    "second_round": [
-        "quarterfinals",
-        "semifinals",
-        "finals",
-        "champion",
-        "quarterfinals_weighted",
-        "semifinals_weighted",
-        "finals_weighted",
-        "champion_weighted",
-    ],
-    "quarterfinals": [
-        "semifinals",
-        "finals",
-        "champion",
-        "semifinals_weighted",
-        "finals_weighted",
-        "champion_weighted",
-    ],
-    "semifinals": ["finals", "champion", "finals_weighted", "champion_weighted"],
-    "finals": ["champion", "champion_weighted"],
-}
-# Hosting rounds that should be nulled/zeroed for rounds strictly after the ceiling.
-_HOSTING_ROUNDS_AFTER: dict[str, list[str]] = {
-    "second_round": ["quarterfinals", "semifinals"],
-    "quarterfinals": ["semifinals"],
-    "semifinals": [],
-    "finals": [],
-}
-
-
-def _apply_round_ceilings(
-    entries: list[TeamBracketEntry],
-    round_ceiling: dict[tuple[int, int], str],
-) -> list[TeamBracketEntry]:
-    """Zero advancement/hosting odds beyond each team's ceiling round.
-
-    Teams in *round_ceiling* are possible opponents of a winner-only simulated
-    result; they participate normally up through their ceiling round and have
-    zero odds beyond it.
-    """
-    if not round_ceiling:
-        return entries
-
-    result: list[TeamBracketEntry] = []
-    for entry in entries:
-        ceiling = round_ceiling.get((entry.region, entry.seed))
-        if ceiling is None:
-            result.append(entry)
-            continue
-
-        adv_fields = _ADVANCEMENT_FIELDS_AFTER.get(ceiling, [])
-        hosting_rounds = _HOSTING_ROUNDS_AFTER.get(ceiling, [])
-
-        new_entry = entry.model_copy(update=dict.fromkeys(adv_fields, 0.0))
-
-        if new_entry.hosting and hosting_rounds:
-            hosting_updates: dict[str, RoundHostingOdds] = {}
-            for rnd in hosting_rounds:
-                cur = getattr(new_entry.hosting, rnd, None)
-                if cur is not None:
-                    hosting_updates[rnd] = cur.model_copy(
-                        update={
-                            "p_host_given_reach": None,
-                            "p_host_overall": 0.0,
-                            "p_host_given_reach_weighted": None,
-                            "p_host_overall_weighted": 0.0,
-                        }
-                    )
-            if hosting_updates:
-                new_entry = new_entry.model_copy(
-                    update={"hosting": new_entry.hosting.model_copy(update=hosting_updates)}
-                )
-
-        result.append(new_entry)
-    return result
-
-
 def clinched_school(region_odds: dict[str, StandingsOdds], seed: int) -> str | None:
     """Return the school whose seed-*seed* probability meets the clinched threshold, or ``None``."""
     attr = f"p{seed}"
     return next(
         (s for s, o in region_odds.items() if getattr(o, attr) >= CLINCHED_THRESHOLD),
         None,
-    )
-
-
-def build_bracket_entries_from_odds_map(
-    by_region: dict[int, dict[str, StandingsOdds]],
-    odds_map: dict[str, BracketOdds],
-    odds_map_weighted: dict[str, BracketOdds] | None = None,
-    hosting_by_slot: dict[str, BracketSlotHosting] | None = None,
-    seed_to_school: dict[tuple[int, int], str] | None = None,
-) -> list[TeamBracketEntry]:
-    """Build ``TeamBracketEntry`` list from pre-computed bracket advancement odds.
-
-    *odds_map* maps slot IDs (e.g. ``"R1S2"``) to ``BracketOdds``.  Slots absent
-    from *odds_map* are skipped.  ``school`` is populated only when a team has
-    clinched that seed position.  *seed_to_school* provides a fallback for
-    eliminated teams whose ``by_region`` odds have been zeroed post-elimination.
-    Used by both the snapshot path (via ``build_bracket_entries``) and the
-    simulation path.
-    """
-    entries: list[TeamBracketEntry] = []
-    for region_num, region_odds in sorted(by_region.items()):
-        for seed in (1, 2, 3, 4):
-            slot_id = f"R{region_num}S{seed}"
-            bo = odds_map.get(slot_id)
-            if bo is None:
-                continue
-            bo_w = odds_map_weighted.get(slot_id) if odds_map_weighted is not None else None
-            school = clinched_school(region_odds, seed)
-            if school is None and seed_to_school is not None:
-                school = seed_to_school.get((region_num, seed))
-            entries.append(
-                TeamBracketEntry(
-                    region=region_num,
-                    seed=seed,
-                    school=school,
-                    second_round=bo.second_round,
-                    quarterfinals=bo.quarterfinals,
-                    semifinals=bo.semifinals,
-                    finals=bo.finals,
-                    champion=bo.champion,
-                    second_round_weighted=bo_w.second_round if bo_w is not None else None,
-                    quarterfinals_weighted=bo_w.quarterfinals if bo_w is not None else None,
-                    semifinals_weighted=bo_w.semifinals if bo_w is not None else None,
-                    finals_weighted=bo_w.finals if bo_w is not None else None,
-                    champion_weighted=bo_w.champion if bo_w is not None else None,
-                    hosting=hosting_by_slot.get(slot_id) if hosting_by_slot is not None else None,
-                )
-            )
-    return entries
-
-
-def with_open_slots(
-    all_region_odds: dict[int, dict[str, StandingsOdds]],
-    by_region: dict[int, dict[str, StandingsOdds]],
-    school_to_seed: dict[str, tuple[int, int]],
-) -> dict[int, dict[str, StandingsOdds]]:
-    """The playoff state's clinched teams, plus a placeholder for every seed no team has clinched yet.
-
-    The playoff state (``build_playoff_bracket_state``) holds only clinched seeds, so before every
-    region is settled a slot without one would drop out of ``build_bracket_entries`` altogether. Each
-    open seed that some team in *by_region* can still take gets a placeholder named for its slot
-    (``"R2S3"``), certain of that seed, as the bracket's slots are before any seed is clinched. A seed
-    no team can take (a region too small for it) stays out.
-    """
-    out = {region: dict(teams) for region, teams in all_region_odds.items()}
-    taken = set(school_to_seed.values())
-    for region, teams in by_region.items():
-        for seed in (1, 2, 3, 4):
-            if (region, seed) in taken or not any(getattr(o, f"p{seed}") > 0 for o in teams.values()):
-                continue
-            slot_id = f"R{region}S{seed}"
-            ones = [1.0 if s == seed else 0.0 for s in (1, 2, 3, 4)]
-            out.setdefault(region, {})[slot_id] = StandingsOdds(slot_id, *ones, 1.0, 1.0, True, False)
-    return out
-
-
-def _slot_odds_for_region(
-    region_num: int,
-    source_odds: dict[str, StandingsOdds] | None,
-) -> dict[str, StandingsOdds]:
-    """Build slot-ID-keyed StandingsOdds for one region.
-
-    When *source_odds* is provided (simulate path with clinched schools), seed
-    probs and eliminated status are inferred from each school's StandingsOdds.
-    Otherwise (GET path), synthetic certainty odds are created for each seed slot.
-    """
-    slot_odds: dict[str, StandingsOdds] = {}
-    if source_odds is not None:
-        for o in source_odds.values():
-            seed = next((s for s, p in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)) if p > 0.5), None)
-            if seed is not None:
-                slot_id = f"R{region_num}S{seed}"
-                slot_odds[slot_id] = StandingsOdds(
-                    school=slot_id,
-                    p1=o.p1,
-                    p2=o.p2,
-                    p3=o.p3,
-                    p4=o.p4,
-                    p_playoffs=o.p_playoffs,
-                    final_playoffs=o.p_playoffs,
-                    clinched=True,
-                    eliminated=o.eliminated,
-                )
-    else:
-        for seed in (1, 2, 3, 4):
-            slot_id = f"R{region_num}S{seed}"
-            slot_odds[slot_id] = StandingsOdds(
-                school=slot_id,
-                p1=1.0 if seed == 1 else 0.0,
-                p2=1.0 if seed == 2 else 0.0,
-                p3=1.0 if seed == 3 else 0.0,
-                p4=1.0 if seed == 4 else 0.0,
-                p_playoffs=1.0,
-                final_playoffs=1.0,
-                clinched=True,
-                eliminated=False,
-            )
-    return slot_odds
-
-
-def _det_round_hosting(val: float | None) -> RoundHostingOdds:
-    """Wrap a deterministic hosting value (1.0/0.0/None) as RoundHostingOdds."""
-    return RoundHostingOdds(
-        p_host_given_reach=val,
-        p_host_overall=val if val is not None else 0.0,
-        p_host_given_reach_weighted=val,
-        p_host_overall_weighted=val if val is not None else 0.0,
-    )
-
-
-def _p_host_odds_from_overall(
-    overall: float,
-    advancement: float,
-    overall_w: float | None,
-    adv_w_val: float | None,
-) -> RoundHostingOdds:
-    """Build RoundHostingOdds from the overall hosting probability + advancement for one round."""
-    have_w = overall_w is not None
-    adv_w_pos = bool(adv_w_val and adv_w_val > 0)
-    if have_w and adv_w_pos:
-        overall_w_out: float | None = overall_w
-    elif have_w:
-        overall_w_out = 0.0
-    else:
-        overall_w_out = None
-    return RoundHostingOdds(
-        p_host_given_reach=overall / advancement if advancement > 0 else None,
-        p_host_overall=overall if advancement > 0 else 0.0,
-        p_host_given_reach_weighted=overall_w / adv_w_val if (have_w and adv_w_pos) else None,  # type: ignore[operator]
-        p_host_overall_weighted=overall_w_out,
-    )
-
-
-def _hosting_for_slot(
-    slot_id: str,
-    region_num: int,
-    seed: int,
-    all_slot_odds: dict[int, dict[str, StandingsOdds]],
-    slots: list[FormatSlot],
-    season: int,
-    is_1a_4a: bool,
-    wins_by_slot: dict[str, int],
-    cross_region_wins: dict[tuple[int, int], int] | None,
-    adv: BracketOdds,
-    adv_w: BracketOdds | None,
-    eliminated_by_slot: dict[str, tuple] | None,
-    win_prob_fn_weighted: MatchupProbFn | None,
-) -> BracketSlotHosting:
-    """Compute BracketSlotHosting for one (region, seed) slot."""
-    slot_odds = all_slot_odds[region_num]
-    null_r2 = RoundHostingOdds(p_host_given_reach=None, p_host_overall=None)
-
-    if eliminated_by_slot and slot_id in eliminated_by_slot:
-        r1_det, r2_det, qf_det, sf_det = eliminated_by_slot[slot_id]
-        return BracketSlotHosting(
-            first_round=_det_round_hosting(r1_det),
-            second_round=_det_round_hosting(r2_det) if is_1a_4a else null_r2,
-            quarterfinals=_det_round_hosting(qf_det),
-            semifinals=_det_round_hosting(sf_det),
-        )
-
-    # R1: structural — home/away determined by bracket format
-    half = half_slots_for_region(region_num, slots)
-    idx = slot_index_for(region_num, seed, half)
-    r1_given_reach = 1.0 if (idx is not None and was_home_r1(region_num, seed, half[idx])) else 0.0
-    slot_o = slot_odds.get(slot_id)
-    p_playoffs = slot_o.p_playoffs if slot_o is not None else 0.0
-    r1_overall = r1_given_reach * p_playoffs
-    r1_odds = RoundHostingOdds(
-        p_host_given_reach=r1_given_reach if p_playoffs > 0 else None,
-        p_host_overall=r1_overall,
-        p_host_given_reach_weighted=r1_given_reach if (p_playoffs > 0 and adv_w is not None) else None,
-        p_host_overall_weighted=r1_overall if adv_w is not None else None,
-    )
-
-    if is_1a_4a:
-        r2_map = compute_second_round_home_odds(
-            region_num, slot_odds, slots, season, wins_confirmed=wins_by_slot, all_region_odds=all_slot_odds
-        )
-        r2_overall = r2_map.get(slot_id, 0.0)
-        r2_overall_w = (
-            compute_second_round_home_odds(
-                region_num,
-                slot_odds,
-                slots,
-                season,
-                win_prob_fn=win_prob_fn_weighted,
-                wins_confirmed=wins_by_slot,
-                all_region_odds=all_slot_odds,
-            ).get(slot_id, 0.0)
-            if win_prob_fn_weighted is not None
-            else None
-        )
-        r2_odds = _p_host_odds_from_overall(
-            r2_overall, adv.second_round, r2_overall_w, adv_w.second_round if adv_w else None
-        )
-    else:
-        r2_odds = null_r2
-
-    qf_map = compute_quarterfinal_home_odds(
-        region_num,
-        slot_odds,
-        slots,
-        season,
-        wins_confirmed=wins_by_slot,
-        all_region_odds=all_slot_odds,
-        cross_region_wins=cross_region_wins,
-    )
-    qf_overall = qf_map.get(slot_id, 0.0)
-    qf_overall_w = (
-        compute_quarterfinal_home_odds(
-            region_num,
-            slot_odds,
-            slots,
-            season,
-            win_prob_fn=win_prob_fn_weighted,
-            wins_confirmed=wins_by_slot,
-            all_region_odds=all_slot_odds,
-            cross_region_wins=cross_region_wins,
-        ).get(slot_id, 0.0)
-        if win_prob_fn_weighted is not None
-        else None
-    )
-    qf_odds = _p_host_odds_from_overall(
-        qf_overall, adv.quarterfinals, qf_overall_w, adv_w.quarterfinals if adv_w else None
-    )
-
-    sf_map = compute_semifinal_home_odds(
-        region_num,
-        slot_odds,
-        slots,
-        season,
-        wins_confirmed=wins_by_slot,
-        all_region_odds=all_slot_odds,
-        cross_region_wins=cross_region_wins,
-    )
-    sf_overall = sf_map.get(slot_id, 0.0)
-    sf_overall_w = (
-        compute_semifinal_home_odds(
-            region_num,
-            slot_odds,
-            slots,
-            season,
-            win_prob_fn=win_prob_fn_weighted,
-            wins_confirmed=wins_by_slot,
-            all_region_odds=all_slot_odds,
-            cross_region_wins=cross_region_wins,
-        ).get(slot_id, 0.0)
-        if win_prob_fn_weighted is not None
-        else None
-    )
-    sf_odds = _p_host_odds_from_overall(sf_overall, adv.semifinals, sf_overall_w, adv_w.semifinals if adv_w else None)
-
-    return BracketSlotHosting(
-        first_round=r1_odds,
-        second_round=r2_odds,
-        quarterfinals=qf_odds,
-        semifinals=sf_odds,
-    )
-
-
-def build_bracket_entries(
-    by_region: dict[int, dict[str, StandingsOdds]],
-    slots: list[FormatSlot],
-    season: int | None = None,
-    clazz: int | None = None,
-    win_prob_fn_weighted: MatchupProbFn | None = None,
-    wins_by_team: dict[str, int] | None = None,
-    all_region_odds: dict[int, dict[str, StandingsOdds]] | None = None,
-    cross_region_wins: dict[tuple[int, int], int] | None = None,
-    eliminated_hosting: dict[str, tuple] | None = None,
-    wins_by_slot: dict[str, int] | None = None,
-    school_to_seed: dict[str, tuple[int, int]] | None = None,
-) -> list[TeamBracketEntry]:
-    """Build ``TeamBracketEntry`` list with advancement and hosting odds per bracket slot.
-
-    Each (region, seed) slot is keyed by a synthetic slot ID (e.g. ``"R1S2"``).
-    Advancement odds are computed structurally (50/50 matchups) and, when
-    *win_prob_fn_weighted* is supplied, also Elo-weighted.  Hosting odds follow
-    the same MHSAA rules used by the hosting endpoints.
-
-    GET path: pass *by_region* only; all slots are treated as certainties.
-    Simulate path (playoff mode): also pass *all_region_odds* (real school names, clinched),
-    *wins_by_team* (school → confirmed wins), *cross_region_wins*, and
-    *eliminated_hosting* (school → (r1,r2,qf,sf) deterministic tuple).
-    Simulate path (pre-clinching mode): pass *wins_by_slot* (slot ID → confirmed wins)
-    directly; school→slot mapping is not available so *wins_by_team* is not used.
-
-    When *season* or *clazz* is ``None``, hosting computation is skipped and
-    ``hosting`` is ``None`` on every entry.
-    """
-    is_1a_4a = clazz is not None and clazz <= 4
-    compute_hosting = season is not None and clazz is not None
-    seed_to_school: dict[tuple[int, int], str] | None = (
-        {(r, s): sch for sch, (r, s) in school_to_seed.items()} if school_to_seed else None
-    )
-
-    # Build slot-ID-keyed odds and wins for all regions in one pass
-    all_slot_odds: dict[int, dict[str, StandingsOdds]] = {}
-    _wins_by_slot: dict[str, int] = {}
-    school_to_slot: dict[str, str] = {}
-
-    for region_num in sorted(by_region):
-        source = all_region_odds.get(region_num) if all_region_odds is not None else None
-        slot_odds = _slot_odds_for_region(region_num, source)
-        all_slot_odds[region_num] = slot_odds
-
-        if wins_by_team and source is not None:
-            for school, o in source.items():
-                seed = next((s for s, p in ((1, o.p1), (2, o.p2), (3, o.p3), (4, o.p4)) if p > 0.5), None)
-                if seed is not None:
-                    sid = f"R{region_num}S{seed}"
-                    school_to_slot[school] = sid
-                    if school in wins_by_team:
-                        _wins_by_slot[sid] = wins_by_team[school]
-
-    # Merge in directly-supplied slot wins (pre-clinching mode)
-    if wins_by_slot:
-        for sid, w in wins_by_slot.items():
-            if sid not in _wins_by_slot:
-                _wins_by_slot[sid] = w
-
-    # Map eliminated_hosting (school-name keys) → slot IDs
-    eliminated_by_slot: dict[str, tuple] | None = None
-    if eliminated_hosting and school_to_slot:
-        eliminated_by_slot = {
-            school_to_slot[school]: tup for school, tup in eliminated_hosting.items() if school in school_to_slot
-        }
-
-    # Compute advancement odds for all regions
-    all_odds: dict[str, BracketOdds] = {}
-    all_odds_w: dict[str, BracketOdds] = {}
-    for region_num, slot_odds in all_slot_odds.items():
-        all_odds.update(compute_bracket_advancement_odds(region_num, slot_odds, slots, wins_confirmed=_wins_by_slot))
-        if win_prob_fn_weighted is not None:
-            all_odds_w.update(
-                compute_bracket_advancement_odds(
-                    region_num,
-                    slot_odds,
-                    slots,
-                    win_prob_fn=win_prob_fn_weighted,
-                    wins_confirmed=_wins_by_slot,
-                )
-            )
-
-    # Compute hosting odds per slot and build entries
-    hosting_by_slot: dict[str, BracketSlotHosting] = {}
-    if compute_hosting:
-        assert season is not None and clazz is not None
-        for region_num, slot_odds in all_slot_odds.items():
-            for seed in (1, 2, 3, 4):
-                slot_id = f"R{region_num}S{seed}"
-                adv = all_odds.get(slot_id)
-                if adv is None:
-                    continue
-                adv_w = all_odds_w.get(slot_id) if win_prob_fn_weighted is not None else None
-                hosting_by_slot[slot_id] = _hosting_for_slot(
-                    slot_id,
-                    region_num,
-                    seed,
-                    all_slot_odds,
-                    slots,
-                    season,
-                    is_1a_4a,
-                    _wins_by_slot,
-                    cross_region_wins,  # type: ignore[arg-type]
-                    adv,
-                    adv_w,
-                    eliminated_by_slot,
-                    win_prob_fn_weighted,
-                )
-
-    return build_bracket_entries_from_odds_map(
-        by_region,
-        all_odds,
-        odds_map_weighted=all_odds_w if win_prob_fn_weighted is not None else None,
-        hosting_by_slot=hosting_by_slot if compute_hosting else None,
-        seed_to_school=seed_to_school,
     )
 
 
@@ -4074,6 +3478,84 @@ def _reach_conditions_for_team(
         game_dates_by_region.get(region, {}),
     )
     return [[PathConditionModel(**d) for d in group] for group in dicts]
+
+
+# ---------------------------------------------------------------------------
+# A class's bracket inputs (/bracket, /bracket/matchups, /bracket/slots and the simulations)
+# ---------------------------------------------------------------------------
+
+
+def as_standings_odds(seed_odds: dict[int, dict[str, dict[int, float]]]) -> dict[int, dict[str, StandingsOdds]]:
+    """region -> team -> StandingsOdds, for building the position-level Elo matchup function."""
+    out: dict[int, dict[str, StandingsOdds]] = {}
+    for region, teams in seed_odds.items():
+        for team, by in teams.items():
+            p = sum(by.values())
+            out.setdefault(region, {})[team] = StandingsOdds(
+                team, by[1], by[2], by[3], by[4], p, p, p >= CLINCHED_THRESHOLD, p <= 0.0
+            )
+    return out
+
+
+def projected_matchup_fn(
+    elo_ratings: dict[str, float], odds_w: dict[int, dict[str, dict[int, float]]]
+) -> MatchupProbFn | None:
+    """The Projected win function for /bracket's slots: each (region, seed) is rated by the expected Elo
+    of the teams that could take it, from their Projected seed odds, as the team pages' bracket odds and
+    /bracket/matchups use. (The playoff state's own function knows only clinched teams, so it would give
+    every open slot 50/50.) None without ratings or Projected odds."""
+    has_projected = any(p > 0 for teams in odds_w.values() for by in teams.values() for p in by.values())
+    if not elo_ratings or not has_projected:
+        return None
+    return make_matchup_prob_fn(elo_ratings, as_standings_odds(odds_w), EloConfig())
+
+
+@dataclass
+class ClassBracketInputs:
+    """What a class's bracket odds are worked out from: the format, each region's seed odds (Toss-up
+    and Projected) with the date of the snapshot they're from and its stored seed pairs, the playoff
+    results so far, and the Projected win function (None without ratings)."""
+
+    slots: list[FormatSlot]
+    odds_t: dict[int, dict[str, dict[int, float]]]
+    odds_w: dict[int, dict[str, dict[int, float]]]
+    standings_dates: dict[int, date]
+    stored_t: dict
+    stored_w: dict
+    results: list[tuple[str, str]]
+    matchup_fn: MatchupProbFn | None
+
+
+async def load_class_bracket_inputs(  # pragma: no cover
+    conn, season: int, class_: int, as_of: date
+) -> ClassBracketInputs:
+    """Load a class's bracket inputs as of *as_of*: the same for ``/bracket/matchups``, ``/bracket``
+    and ``/bracket/slots``, so their odds agree, and with the standings' ``bracket_odds``.
+
+    Raises:
+        HTTPException 404: no playoff format, or no standings, for the class and season.
+    """
+    slots = await _load_format_slots(conn, season, class_)
+    if not slots:
+        raise HTTPException(status_code=404, detail=f"No playoff format for {class_}A season {season}")
+    odds_t, odds_w, standings_dates = await load_region_seed_odds(conn, season, class_, as_of)
+    if not odds_t:
+        raise HTTPException(status_code=404, detail=f"No standings data for {class_}A season {season}")
+    stored_t, stored_w = await load_region_seed_pairs(conn, season, class_, as_of)
+    # A region whose newest snapshot has standings but no pairs (written
+    # before pairs existed) uses its newest snapshot that has both, so its
+    # seed odds and pairs still come from one computation.
+    stale = regions_needing_fallback(odds_t, standings_dates, stored_t)
+    fallback = await load_region_fallback_snapshots(conn, season, class_, as_of, stale)
+    for region, (snap, seeds_t, seeds_w, pairs_t, pairs_w) in fallback.items():
+        odds_t[region], odds_w[region] = seeds_t, seeds_w
+        stored_t[region], stored_w[region] = (snap, pairs_t), (snap, pairs_w)
+        standings_dates[region] = snap
+    results = await load_playoff_results(conn, season, class_, as_of)
+    elo_ratings = await _load_elo_ratings(conn, season, as_of)
+    return ClassBracketInputs(
+        slots, odds_t, odds_w, standings_dates, stored_t, stored_w, results, projected_matchup_fn(elo_ratings, odds_w)
+    )
 
 
 def _slot_game_id(slot: int, round_name: str, slots: list[FormatSlot]) -> str | None:

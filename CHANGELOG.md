@@ -5,6 +5,21 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.42.0
+
+The API's simulations (owner only) work out their odds the way the site does, from the whole
+class's bracket:
+
+- `POST /bracket/simulate`, `POST /hosting/{clazz}/simulate` and
+  `POST /hosting/{clazz}/{region}/simulate` (and its one-team form): a result's winner wins that
+  game, and both teams won the games before it; a result with only a round has the winner win its
+  game in that round. A game already played keeps its real result. Byes are known.
+- `POST /standings/{clazz}/{region}/simulate`: the bracket and hosting odds come from the region's
+  simulated seeding with the other regions' stored seeding.
+- The region-by-region bracket and hosting code these used is gone.
+
+The site doesn't use these endpoints, so nothing on it changes.
+
 ## 1.41.0
 
 The API's bracket endpoints give the same figures as the site:
