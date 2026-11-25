@@ -108,16 +108,22 @@ test("a team's what-has-to-happen image: offered where it has pages, with its ow
   assert.equal(teamImageLabel(2026, "Magee", { image: "scenarios", mode: "projected" }), "What has to happen for Magee, with Projected odds");
 });
 
-test("a region's and a team's scenarios on one image, beside their pages", () => {
+test("the scenarios on one image: a layout of the scenarios, not an image of its own", async () => {
+  const { shownImage, SHARE_LAYOUTS } = await import("../html/static/js/share.js");
+  assert.deepEqual(SHARE_LAYOUTS.map((l) => l.key), ["pages", "one"]);
+  assert.equal(shownImage({ image: "scenarios", layout: "one" }), "scenarios-all");
+  assert.equal(shownImage({ image: "scenarios", layout: "pages" }), "scenarios");
+  assert.equal(shownImage({ image: "overview", layout: "one" }), "overview"); // only the scenarios have one
   const index = {
     scenarios: { "projected-light": 3 },
     "scenarios-all": { "projected-light": 1 },
-    teams: { Magee: { season: { "projected-light": 1 }, "scenarios-all": { "projected-light": 1 } } },
+    teams: { Magee: { season: { "projected-light": 1 }, scenarios: { "projected-light": 2 }, "scenarios-all": { "projected-light": 1 } } },
   };
   const c = { image: "scenarios-all", mode: "projected", theme: "light" };
-  assert.deepEqual(regionImages(index, c).map((i) => i.key), ["scenarios", "scenarios-all"]);
+  // The Image choice is the overview or the scenarios (the season or what has to happen): never both layouts.
+  assert.deepEqual(regionImages(index, c).map((i) => i.key), ["scenarios"]);
+  assert.deepEqual(teamImages(index, "Magee", c).map((i) => i.key), ["season", "scenarios"]);
   assert.equal(regionImagePath(2026, 6, 2, c, 1, regionPages(index, c)), "/static/region/2026/6a-2-scenarios-all-projected-light.png");
-  assert.equal(regionImageLabel(6, 2, c), "Region 2-6A scenarios (one image), with Projected odds");
-  assert.deepEqual(teamImages(index, "Magee", c).map((i) => i.key), ["season", "scenarios-all"]);
+  assert.equal(regionImageLabel(6, 2, c), "Region 2-6A scenarios, on one image, with Projected odds");
   assert.equal(teamImageLabel(2026, "Magee", c), "What has to happen for Magee, on one image, with Projected odds");
 });

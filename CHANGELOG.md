@@ -5,6 +5,15 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.39.2
+
+The share sheet:
+
+- Its title names what it shares: "Share the Class 4A bracket", "Share Region 3-4A", "Share Class 4A's
+  regions, compared", "Share Hinds County, compared".
+- A region's scenarios, and a team's "What has to happen", choose their layout apart from the image:
+  "Pages" or "One image", shown once the scenarios are picked.
+
 ## 1.39.1
 
 - The share sheet's preview no longer flashes blank when an option changes: the image shown stays,
