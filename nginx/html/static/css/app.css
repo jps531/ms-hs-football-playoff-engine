@@ -1840,8 +1840,9 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
   background: var(--surface-raised);
   overflow: hidden;
 }
-.share-sheet__frame.is-wide { height: min(26vh, 18rem); }
-.share-sheet__preview { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
+/* The image fills the frame and is drawn whole inside it (object-fit), not sized by a percentage
+   max-height: Safari can ignore that on an image in a flex box, drawing it frame-wide and cropped. */
+.share-sheet__preview { display: block; width: 100%; height: 100%; object-fit: contain; }
 /* The last image, while the one chosen loads (app.js steadyPreview). */
 .share-sheet__preview.is-stale { opacity: 0.45; transition: opacity 120ms ease-out; }
 @media (prefers-reduced-motion: reduce) { .share-sheet__preview.is-stale { transition: none; } }
