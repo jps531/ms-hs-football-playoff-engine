@@ -60,8 +60,8 @@ specific seed pinned to that exact position — not alphabetical order.
 
 ### Response fields per team (`teams[]`)
 - `odds` — seeding probabilities `p1`–`p4` and `p_playoffs`, plus Projected (Elo-weighted) variants `p1_weighted`–`p_playoffs_weighted`
-- `bracket_odds` — probability of advancing to each playoff round (`second_round` through `champion`), unweighted and weighted. Worked out for the whole class from the bracket recursion `/bracket/matchups` uses (`team_playoff_odds`), so they're the bracket's own figures: byes are known and played games are fixed. `null` for on-demand/simulate paths.
-- `home_game_odds` — P(hosts round | reaches round) for each round (`second_round` through `semifinals`), and for `first_round` P(hosts its first-round game | makes the playoffs) (a bye isn't a home game), unweighted and weighted. From the same recursion, with the MHSAA hosting rules in `bracket_home_odds`. `null` for on-demand/simulate paths.
+- `bracket_odds` — probability of advancing to each playoff round (`second_round` through `champion`), unweighted and weighted. Worked out for the whole class from the bracket recursion `/bracket/matchups` uses (`team_playoff_odds`), so they're the bracket's own figures: byes are known and played games are fixed. A standings simulation works them out the same way from the region's simulated seeding and the other regions' stored seeding. `null` when the class has no playoff format, and on the on-demand path (a region with no snapshot).
+- `home_game_odds` — P(hosts round | reaches round) for each round (`second_round` through `semifinals`), and for `first_round` P(hosts its first-round game | makes the playoffs) (a bye isn't a home game), unweighted and weighted. From the same recursion, with the MHSAA hosting rules in `bracket_home_odds`; `null` in the same cases as `bracket_odds`.
 - `clinched`, `eliminated`, `coin_flip_needed`
 - `paths` — only present when `include_team_scenarios=true` and scenarios are available. Minimized, machine-readable per-team conditions for condition "chips," a team-page "Paths" module, and "Play this out" (mapping conditions to simulate-mode picks). One entry per achievable outcome:
   - `outcome` — `{"type": "seed", "value": N}`, `{"type": "playoffs"}` (any seed), or `{"type": "eliminated"}`
@@ -196,16 +196,18 @@ Each result identifies participants by school name, (region, seed) slot ref, or 
 ```
 
 - `loser` — specific opponent. Mutually exclusive with `round`.
-- `round` — one of `"second_round"`, `"quarterfinals"`, `"semifinals"`. When used instead of `loser`, all teams that could have been the opponent in that round are marked eliminated, so they do not appear in later rounds. The winner advances to the next round in `bracket_layout` with `result.loser = null`. Use this to simulate a team's run without enumerating every game (e.g. `[{"winner": "X", "round": "second_round"}, {"winner": "X", "round": "quarterfinals"}]` advances X to the semifinals).
+- `round` — one of `"second_round"`, `"quarterfinals"`, `"semifinals"`. When used instead of `loser`, the winner wins its game in that round, whoever it plays, so the teams that could have been its opponent go no further. The winner advances to the next round in `bracket_layout` with `result.loser = null`. Use this to simulate a team's run without enumerating every game (e.g. `[{"winner": "X", "round": "second_round"}, {"winner": "X", "round": "quarterfinals"}]` advances X to the semifinals).
 - `winner_score` / `loser_score` — optional. Defaults to 12/0 (forfeit) when omitted on all simulate endpoints.
 
 A plain string for `winner` or `loser` is shorthand for `{"school": "Name"}`. Confirmed DB results are never overridden by simulated ones for the same matchup.
 
+The odds are the class bracket's (`slot_playoff_odds` / `team_playoff_odds`, as `GET /bracket` and the standings' `bracket_odds`), with each result's winner winning that game (`forced_wins`). To have played it, both teams won every game before it, so a result also has them win their earlier games. Two teams from different halves meet in the championship. A school is placed at the seed it has clinched; a result naming a school without one can't be placed and is skipped.
+
 **Bracket simulate** (`POST /bracket/simulate`): works in two modes:
 - *Playoff mode* (some or all seedings clinched): school names and slot refs both resolve to known teams. The returned `bracket_layout` merges confirmed DB results (marked `simulated: false`) with the hypothetical results in the request body (marked `simulated: true`), and propagates winners into downstream game participants. While only some seedings are clinched, `teams[]` still lists every slot a team can take (as `GET /bracket` does), and a result given by an open seed's slot ref counts as that slot's win, as in pre-clinching mode.
-- *Pre-clinching mode* (no seedings clinched yet): only slot refs are meaningful; school-name refs are silently skipped. `bracket_layout` game nodes will have `null` participants and results. Round-based (loser-less) results require seedings to be clinched and have no effect in pre-clinching mode.
+- *Pre-clinching mode* (no seedings clinched yet): only slot refs are meaningful; school-name refs are silently skipped. `bracket_layout` game nodes will have `null` participants and results. A round-based (loser-less) result given by slot ref counts in `teams[]` as in playoff mode.
 
-**Hosting simulate** (`POST /hosting/{clazz}/simulate`, `POST /hosting/{clazz}/{region}/simulate`): slot refs apply only in playoff mode (seedings clinched); they are silently skipped in regular-season mode where school names are required.
+**Hosting simulate** (`POST /hosting/{clazz}/simulate`, `POST /hosting/{clazz}/{region}/simulate`): in playoff mode (no regular-season games left), the bracket results apply as above to the stored seeds, and the playoff teams are listed. In regular-season mode the results are region games, given by school name (slot refs are skipped). The hosting odds are worked out for the whole class from the simulated seeding, with the stored seeding for regions not simulated. The first round's hosting is given making the playoffs (a bye isn't a home game).
 
 ## Games — `/games`
 

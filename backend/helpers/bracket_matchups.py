@@ -123,11 +123,15 @@ class _Bracket:
         occupants: dict[Position, dict[str, float]],
         win_prob_fn: MatchupProbFn,
         results: Iterable[tuple[str, str]],
+        forced: Iterable[tuple[Position, int]] = (),
     ):
         self.season = season
         self.occupants = occupants
         self.win_prob_fn = win_prob_fn
         self.beat_pairs = {(w, loser) for w, loser in results}
+        # (position, round index) a what-if says the position wins: round index within its half,
+        # -1 for the championship (``forced_wins``).
+        self.forced = set(forced)
         self.halves: dict[str, list[FormatSlot]] = {}
         for ns in ("N", "S"):
             half = sorted((s for s in slots if s.north_south == ns), key=lambda s: s.slot)
@@ -212,10 +216,13 @@ class _Bracket:
             for y, py in node.side_b.items():
                 # A position no team can fill (a region short of four
                 # playoff teams) forfeits; otherwise the game is played.
+                fx, fy = (x, node.round_index) in self.forced, (y, node.round_index) in self.forced
                 if self._filled(y) <= _EPS:
                     p_x = 1.0
                 elif self._filled(x) <= _EPS:
                     p_x = 0.0
+                elif fx != fy:
+                    p_x = 1.0 if fx else 0.0  # a what-if result
                 else:
                     p_x = self._beat(x, y)
                 winner[x] = winner.get(x, 0.0) + px * py * p_x
@@ -345,6 +352,7 @@ def bracket_outlook(
     seed_pairs: dict[int, dict[PairKey, float] | None],
     win_prob_fn: MatchupProbFn,
     results: Iterable[tuple[str, str]] = (),
+    forced: Iterable[tuple[Position, int]] = (),
 ) -> list[GameOutlook]:
     """Every bracket game's possible occupants and matchups for one odds mode.
 
@@ -356,13 +364,14 @@ def bracket_outlook(
             available (matchups needing them are then left out).
         win_prob_fn: Position-level win probability (home position first).
         results: Confirmed playoff results as (winner, loser) team names.
+        forced: What-if wins, (position, round index), from ``forced_wins``.
 
     Returns:
         One ``GameOutlook`` per game, half by half, round by round, then the
         championship.
     """
     occupants = _occupants(slots, seed_odds)
-    bracket = _Bracket(slots, season, occupants, win_prob_fn, results)
+    bracket = _Bracket(slots, season, occupants, win_prob_fn, results, forced)
     out: list[GameOutlook] = []
     for node in bracket.nodes():
         out.append(_game_outlook(bracket, node, occupants, seed_pairs))
@@ -427,6 +436,7 @@ def _game_odds(
     win_prob_fn: MatchupProbFn,
     results: Iterable[tuple[str, str]],
     by_position: bool,
+    forced: Iterable[tuple[Position, int]] = (),
 ) -> tuple[list[GameOdds], dict]:
     """Every game's reach and hosting odds, and the title odds, per team or per position.
 
@@ -437,7 +447,7 @@ def _game_odds(
     hosting does; the championship is at a neutral site.
     """
     occupants = _occupants(slots, seed_odds)
-    bracket = _Bracket(slots, season, occupants, win_prob_fn, results)
+    bracket = _Bracket(slots, season, occupants, win_prob_fn, results, forced)
 
     def holders(pos: Position) -> Iterable[tuple]:
         """Who's counted for *pos*, with their weight."""
@@ -499,6 +509,7 @@ def team_playoff_odds(
     seed_odds: dict[int, dict[str, dict[int, float]]],
     win_prob_fn: MatchupProbFn,
     results: Iterable[tuple[str, str]] = (),
+    forced: Iterable[tuple[Position, int]] = (),
 ) -> dict[str, TeamPlayoffOdds]:
     """Each team's chance to reach, host and win each round: the bracket's own numbers, per team.
 
@@ -514,11 +525,12 @@ def team_playoff_odds(
         seed_odds: region -> team -> {seed: P(team takes that seed)}, every region in the class.
         win_prob_fn: Position-level win probability (home position first).
         results: Confirmed playoff results as (winner, loser) team names.
+        forced: What-if wins, (position, round index), from ``forced_wins``.
 
     Returns:
         team -> ``TeamPlayoffOdds``, for every team with a chance at some seed.
     """
-    return _by_round(*_game_odds(slots, season, seed_odds, win_prob_fn, results, by_position=False))
+    return _by_round(*_game_odds(slots, season, seed_odds, win_prob_fn, results, False, forced))
 
 
 def slot_playoff_odds(
@@ -527,6 +539,7 @@ def slot_playoff_odds(
     seed_odds: dict[int, dict[str, dict[int, float]]],
     win_prob_fn: MatchupProbFn,
     results: Iterable[tuple[str, str]] = (),
+    forced: Iterable[tuple[Position, int]] = (),
 ) -> dict[Position, TeamPlayoffOdds]:
     """The same odds per (region, seed) position: for whoever holds it, as ``/bracket``'s slots are.
 
@@ -534,7 +547,7 @@ def slot_playoff_odds(
     ``team_playoff_odds``. A position no team can take has no game, so no odds; the team that would
     have played it has a bye. Arguments as ``team_playoff_odds``.
     """
-    return _by_round(*_game_odds(slots, season, seed_odds, win_prob_fn, results, by_position=True))
+    return _by_round(*_game_odds(slots, season, seed_odds, win_prob_fn, results, True, forced))
 
 
 def game_playoff_odds(
@@ -543,11 +556,12 @@ def game_playoff_odds(
     seed_odds: dict[int, dict[str, dict[int, float]]],
     win_prob_fn: MatchupProbFn,
     results: Iterable[tuple[str, str]] = (),
+    forced: Iterable[tuple[Position, int]] = (),
 ) -> dict[str, GameOdds]:
     """Each game's odds per team, by game id (``bracket_outlook``'s ``game_id``): who plays in it
     and hosts it. Summed over a round's games, they are ``team_playoff_odds``. Arguments as
     ``team_playoff_odds``."""
-    games, _ = _game_odds(slots, season, seed_odds, win_prob_fn, results, by_position=False)
+    games, _ = _game_odds(slots, season, seed_odds, win_prob_fn, results, False, forced)
     return {g.game_id: g for g in games}
 
 
@@ -561,6 +575,61 @@ def game_id_for(slots: list[FormatSlot], slot: int, round_index: int) -> str | N
             if s.slot == slot:
                 return f"{ns}-{round_index}-{i >> round_index}"
     return None
+
+
+# A what-if result's round (``BracketGameResultRequest.round``) -> its round index within a half,
+# for halves of eight first-round games (1A-4A) and of four (5A-7A).
+_WHAT_IF_ROUND = {
+    8: {"first_round": 0, "second_round": 1, "quarterfinals": 2, "semifinals": 3},
+    4: {"first_round": 0, "quarterfinals": 1, "semifinals": 2},
+}
+
+
+def forced_wins(
+    slots: list[FormatSlot], what_ifs: Iterable[tuple[Position, Position | None, str | None]]
+) -> set[tuple[Position, int]]:
+    """The wins a set of what-if results puts in the bracket: (position, round index) pairs.
+
+    Each what-if is (winner, loser, round) by position: a loser, or the round the winner won in.
+    The winner wins that game, and to have played it, both teams won every game before it in
+    their own part of the bracket. Two positions in different halves meet in the championship
+    (round index -1). A what-if naming a position that isn't in the bracket, or a round the class
+    doesn't have, adds nothing.
+    """
+    place: dict[Position, tuple[str, int]] = {}
+    size: dict[str, int] = {}
+    for ns in ("N", "S"):
+        half = sorted((s for s in slots if s.north_south == ns), key=lambda s: s.slot)
+        size[ns] = len(half)
+        for i, s in enumerate(half):
+            place[(s.home_region, s.home_seed)] = (ns, i)
+            place[(s.away_region, s.away_seed)] = (ns, i)
+
+    def through(pos: Position, last: int) -> set[tuple[Position, int]]:
+        """*pos* winning its games up to and including round index *last* (-1: the whole half and the final)."""
+        ns, _ = place[pos]
+        half_rounds = size[ns].bit_length()  # 8 games: 4 rounds in the half; 4 games: 3
+        rounds = [*range(half_rounds), -1] if last == -1 else range(last + 1)
+        return {(pos, k) for k in rounds}
+
+    out: set[tuple[Position, int]] = set()
+    for winner, loser, round_key in what_ifs:
+        if winner not in place:
+            continue
+        if loser is not None:
+            if loser not in place:
+                continue
+            (hw, iw), (hl, il) = place[winner], place[loser]
+            meet = -1 if hw != hl else (iw ^ il).bit_length()
+            out |= through(winner, meet)
+            before = (size[hl].bit_length() - 1) if meet == -1 else meet - 1
+            if before >= 0:
+                out |= through(loser, before)
+        else:
+            index = _WHAT_IF_ROUND.get(size[place[winner][0]], {}).get(round_key or "")
+            if index is not None:
+                out |= through(winner, index)
+    return out
 
 
 def _team_side(side: dict[Position, float], occupants: dict[Position, dict[str, float]]) -> dict[str, float]:
