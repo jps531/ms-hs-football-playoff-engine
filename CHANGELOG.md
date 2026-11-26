@@ -5,6 +5,12 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.42.1
+
+- The share sheet's preview shows the whole image in Safari: it could be drawn as wide as the frame
+  and cropped top and bottom (the bracket, in the light theme). The image now fills the frame and is
+  fitted inside it.
+
 ## 1.42.0
 
 The API's simulations (owner only) work out their odds the way the site does, from the whole

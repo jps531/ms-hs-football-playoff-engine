@@ -1929,7 +1929,6 @@ function bracketShareSpec() {
     version: asOf,
     name: (c) => bracketImageName(season, clazz, c),
     label: (c) => bracketImageLabel(clazz, c),
-    wide: () => false, // the whole bracket is drawn in portrait
     page: `${location.origin}/brackets/${clazz}a${latest ? "" : `?season=${season}`}`,
     latest,
     track: (c, method) => track("bracket_image_shared", { class: clazz, season, view: c.view, version: c.version, theme: c.theme, method }),
@@ -1980,7 +1979,6 @@ async function regionShareSpec() {
     version: asOf,
     name: (c, page, pages) => regionImageName(season, clazz, region, shown(c), page, pages),
     label: (c) => regionImageLabel(clazz, region, shown(c)),
-    wide: () => false,
     page: `${location.origin}/standings/${clazz}a/${region}${current ? "" : `?season=${season}`}`,
     latest: true,
     track: (c, method) => track("region_image_shared", { class: clazz, region, season, image: shownImage(c), mode: c.mode, theme: c.theme, method }),
@@ -2033,7 +2031,6 @@ async function teamShareSpec(school) {
     version: asOf,
     name: (c, page, pages) => teamImageName(season, school, shown(c), page, pages),
     label: (c) => teamImageLabel(season, school, shown(c)),
-    wide: () => false,
     page: `${location.origin}/standings/${clazz}a/${region}?${current ? "" : `season=${season}&`}team=${slugify(school)}`,
     latest: true,
     track: (c, method) => track("team_image_shared", { class: clazz, region, season, team: school, image: shownImage(c), mode: c.mode, theme: c.theme, method }),
@@ -2131,7 +2128,7 @@ function shareHtml() {
     <div class="game-sheet__body share-sheet__body">
       ${spec.subjects ? subjectControl(spec) : ""}
       ${spec.groups(c).map(group).join("")}
-      <div class="share-sheet__frame${spec.wide(c) ? " is-wide" : ""}">${preview}</div>
+      <div class="share-sheet__frame">${preview}</div>
       ${pager}
       <div class="share-sheet__actions">
         ${canShareFiles() ? `<button type="button" class="share-sheet__primary" data-share-act="share"${disabled}>${SHARE_ICON}Share${pages > 1 ? ` ${pages} images` : ""}</button>` : ""}
@@ -3713,7 +3710,6 @@ function regionsShareSpec() {
     version: null,
     name: (c) => `${what(c)}-${season}.png`,
     label,
-    wide: () => false,
     page: `${location.origin}/maps/regions/${clazz}a${(() => {
       const q = new URLSearchParams();
       if (season !== regionsDefault) q.set("season", season);
@@ -3745,7 +3741,6 @@ function mapsShareSpec({ title, when, kinds, initial, page, view, season }) {
     version: null,
     name: (c) => `${kind(c).name}.png`,
     label: (c) => kind(c).alt,
-    wide: () => false,
     page,
     latest: true,
     track: (c, method) => track("regions_image_shared", {
