@@ -24,7 +24,8 @@ import {
 import { FRONT_PAGE_URL, LANDING_FALLBACK, isFrontPage } from "./landing.js";
 import { mountTurnstile, removeTurnstile, resetTurnstile, turnstileToken } from "./turnstile.js";
 import { CLASSES, FORMER_SLUGS, slugify, parseLocation, buildPath } from "./routes.js";
-import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, timelinePage, timelineSeasons, timelineSpan, countyPage, countyLayer, countyHome, countiesPage, countiesPath, countyTitle, countyCounts, schoolsCount, hoverSpot, countyMark, countShade, countyJumpHtml, timelineSteps, countyComparePage, countyTimelinePage, namesIn, mergeSameSeasons, countySeasonKey } from "./regions.js";
+import { countiesShareModel, regionsShareModel } from "./mapshare.js";
+import { regionsFile, pickOption, regionsPage, regionsTitle, seasonsLabel, wireRegionsMap, place as regionPlace, mapsViews, comparePage, notOnMapHtml, timelinePage, timelineSeasons, timelineSpan, countyPage, countyLayer, countyHome, countiesPage, countiesPath, countyTitle, countyCounts, schoolsCount, hoverSpot, countyMark, countShade, countyJumpHtml, timelineSteps, countyComparePage, countyTimelinePage, namesIn, nameIn, mergeSameSeasons, countySeasonKey } from "./regions.js";
 import { startAnalytics, track, keepCampaignTags, campaignTags } from "./analytics.js";
 import {
   CATEGORIES, MESSAGE_MAX, NOTE_MAX, MIN_FILL_MS, feedbackProblem, feedbackBody, scoreProblem, scoreBody, dateProblem, dateBody,
@@ -1898,6 +1899,10 @@ function shareDialog() {
   document.body.append(shareSheet);
   shareSheet.addEventListener("click", onShareClick);
   shareSheet.addEventListener("change", onShareSubject);
+  shareSheet.addEventListener("change", (e) => {
+    const pick = e.target.closest("[data-share-pick]");
+    if (pick) chooseShare(pick.dataset.sharePick, pick.value);
+  });
   // Back to the button that opened it (a page has several: the region's, a team's).
   shareSheet.addEventListener("close", () => (shareOpener?.isConnected ? shareOpener : document.querySelector("[data-share-open]"))?.focus({ preventScroll: true }));
   return shareSheet;
@@ -2098,14 +2103,26 @@ function subjectControl(spec) {
     </div>`;
 }
 
+/** A spec field that's either fixed or follows the choice (a function of it). */
+const byChoice = (value, c) => (typeof value === "function" ? value(c) : value);
+
 function shareHtml() {
   const spec = shareSpec;
   const c = shareUi.choice;
   const pages = sharePages();
-  const group = ({ label, key, options }) => `<div class="share-sheet__group" role="group" aria-label="${esc(label)}">
+  const note = (text) => (text ? `<p class="share-sheet__note muted">${esc(text)}</p>` : "");
+  // A row of buttons (a greyed-out one has no image), or a dropdown (select: true); either can carry a note.
+  const group = ({ label, key, options, select = false, note: why = "" }) => (select
+    ? `<div class="share-sheet__group">
+      <label class="share-sheet__label" for="share-pick-${esc(key)}">${esc(label)}</label>
+      <select class="share-sheet__select" id="share-pick-${esc(key)}" data-share-pick="${esc(key)}">${options.map((o) => `<option value="${esc(o.key)}"${c[key] === o.key ? " selected" : ""}${o.disabled ? " disabled" : ""}>${esc(o.label)}</option>`).join("")}</select>
+      ${note(why)}
+    </div>`
+    : `<div class="share-sheet__group" role="group" aria-label="${esc(label)}">
       <p class="share-sheet__label" aria-hidden="true">${esc(label)}</p>
-      <div class="half-control">${options.map((o) => `<button type="button" class="half-control__item" data-share-opt="${key}:${o.key}" aria-pressed="${c[key] === o.key}">${esc(o.label)}</button>`).join("")}</div>
-    </div>`;
+      <div class="half-control">${options.map((o) => `<button type="button" class="half-control__item" data-share-opt="${key}:${o.key}" aria-pressed="${c[key] === o.key}"${o.disabled ? " disabled" : ""}>${esc(o.label)}</button>`).join("")}</div>
+      ${note(why)}
+    </div>`);
   const img = shareUi.image;
   const ready = Boolean(img?.blobs);
   const label = spec.label(c);
@@ -2121,8 +2138,8 @@ function shareHtml() {
     : "";
   const disabled = ready ? "" : " disabled";
   return `<div class="game-sheet__head">
-      <div><h2 class="game-sheet__title" id="share-sheet-title" tabindex="-1" autofocus>${esc(spec.title)}</h2>
-        <p class="game-sheet__prov provenance">${esc(spec.when)}</p></div>
+      <div><h2 class="game-sheet__title" id="share-sheet-title" tabindex="-1" autofocus>${esc(byChoice(spec.title, c))}</h2>
+        <p class="game-sheet__prov provenance">${esc(byChoice(spec.when, c))}</p></div>
       <button type="button" class="game-sheet__close" data-share-close>${CLOSE}<span class="visually-hidden">Close</span></button>
     </div>
     <div class="game-sheet__body share-sheet__body">
@@ -2146,13 +2163,13 @@ function shareHtml() {
  */
 function refreshShare() {
   if (!shareSheet?.open) return;
-  const focused = document.activeElement?.closest?.("[data-share-opt], [data-share-act], [data-share-page]");
-  const key = focused?.dataset.shareOpt ?? focused?.dataset.shareAct ?? focused?.dataset.sharePage;
+  const focused = document.activeElement?.closest?.("[data-share-opt], [data-share-act], [data-share-page], [data-share-pick]");
+  const key = focused?.dataset.shareOpt ?? focused?.dataset.shareAct ?? focused?.dataset.sharePage ?? focused?.dataset.sharePick;
   const shown = shareSheet.querySelector(".share-sheet__preview");
   shareSheet.innerHTML = shareHtml();
   steadyPreview(shown);
   const again = key && shareSheet.querySelector(
-    `[data-share-opt="${CSS.escape(key)}"], [data-share-act="${CSS.escape(key)}"], [data-share-page="${CSS.escape(key)}"]`,
+    `[data-share-opt="${CSS.escape(key)}"], [data-share-act="${CSS.escape(key)}"], [data-share-page="${CSS.escape(key)}"], [data-share-pick="${CSS.escape(key)}"]`,
   );
   (again && !again.disabled ? again : shareSheet.querySelector(".game-sheet__title"))?.focus({ preventScroll: true });
 }
@@ -2198,6 +2215,16 @@ async function onShareSubject(e) {
   shareSheet.querySelector("[data-share-subject]")?.focus({ preventScroll: true });
 }
 
+/** One of the sheet's choices changed (a button, or a dropdown): the image it now names. */
+function chooseShare(key, value) {
+  const next = { ...shareUi.choice, [key]: value };
+  shareUi.choice = shareSpec.fix ? shareSpec.fix(next) : next;
+  shareUi.page = 1;
+  shareUi.status = "";
+  refreshShare();
+  loadShareImage();
+}
+
 function onShareClick(e) {
   if (e.target === shareSheet || e.target.closest("[data-share-close]")) {
     shareSheet.close();
@@ -2205,13 +2232,8 @@ function onShareClick(e) {
   }
   const opt = e.target.closest("[data-share-opt]");
   if (opt) {
-    const [key, value] = opt.dataset.shareOpt.split(":");
-    const next = { ...shareUi.choice, [key]: value };
-    shareUi.choice = shareSpec.fix ? shareSpec.fix(next) : next;
-    shareUi.page = 1;
-    shareUi.status = "";
-    refreshShare();
-    loadShareImage();
+    const at = opt.dataset.shareOpt.indexOf(":");
+    chooseShare(opt.dataset.shareOpt.slice(0, at), opt.dataset.shareOpt.slice(at + 1));
     return;
   }
   const turn = e.target.closest("[data-share-page]");
@@ -2251,7 +2273,7 @@ async function shareAction(how) {
   if (how === "share") {
     const files = blobs.map((blob, i) => new File([blob], names[i], { type: "image/png" }));
     try {
-      await navigator.share({ files, title: spec.label(c), text: `${spec.label(c)}: ${spec.page}` });
+      await navigator.share({ files, title: spec.label(c), text: `${spec.label(c)}: ${byChoice(spec.page, c)}` });
       done("");
     } catch (err) {
       if (err?.name === "AbortError") return; // closed the share sheet
@@ -2834,13 +2856,12 @@ app.addEventListener("click", (e) => {
     if (shareOpen.dataset.shareOpen === "team" && regionShare) {
       track("team_share_opened", { class: regionShare.clazz, region: regionShare.region, team: shareOpen.dataset.team });
       teamShareSpec(shareOpen.dataset.team).then(openShare);
-    } else if (shareOpen.dataset.shareOpen === "map" && route.page === "counties" && countyShare) {
-      track("regions_share_opened", { class: null, team: null, view: countyShare.view, county: route.countyName ?? null });
-      openShare(mapsShareSpec({ ...countyShare, page: `${location.origin}${location.pathname}${location.search}` }));
+    } else if (shareOpen.dataset.shareOpen === "map" && route.page === "counties") {
+      track("regions_share_opened", { class: null, team: null, view: route.countyName ? sheetView() : "counties", county: route.countyName ?? null });
+      countiesSheetSpec().then(openShare);
     } else if (shareOpen.dataset.shareOpen === "map" && regionsState) {
-      const view = route.view === "compare" || route.view === "timeline" ? route.view : null;
-      track("regions_share_opened", { class: regionsState.clazz, team: route.teamName ?? regionsState.picked?.school ?? null, ...(view ? { view } : {}) });
-      openShare(view === "compare" ? compareShareSpec() : view === "timeline" ? timelineShareSpec() : regionsShareSpec());
+      track("regions_share_opened", { class: regionsState.clazz, team: route.teamName ?? regionsState.picked?.school ?? null, view: sheetView() });
+      regionsSheetSpec().then(openShare);
     } else if (shareOpen.dataset.shareOpen === "region" && regionShare) {
       track("region_share_opened", { class: regionShare.clazz, region: regionShare.region });
       regionShareSpec().then(openShare);
@@ -2978,7 +2999,6 @@ async function renderCounties(token) {
   showContext(null);
   app.setAttribute("aria-busy", "true");
   regionsState = null;
-  countyShare = null;
   route.countyName = null;
   try {
     const index = await regionsFile("index.json");
@@ -3025,18 +3045,10 @@ async function renderCounties(token) {
       await renderCountyTimeline(token, index, base, county, { finder, views });
       if (token !== renderToken) return;
     } else if (!county) {
-      countyShare = {
-        title: "Share the counties map", when: seasonsLabel(option.seasons), view: "counties", season: option.season,
-        kinds: [{ key: "counties", label: "Every county", file: `${option.season}/counties`, name: `mhsaa-schools-by-county-${option.season}`, alt: `MHSAA schools by county, ${option.label}` }],
-      };
       app.innerHTML = countiesPage(base, payload, { controls: `<div class="regions-controls">${seasons}${finder}</div>`, share: shareButton("map") });
       wireCountiesMap(app, counts, goTo);
     } else {
       const has = payload.schools.some((r) => r.county === county);
-      countyShare = has ? {
-        title: `Share ${countyTitle(county)}`, when: seasonsLabel(option.seasons), view: "county", season: option.season,
-        kinds: [countyKind(county, option), countyCompareKind(county, index, option)].filter(Boolean),
-      } : null;
       app.innerHTML = countyPage(county, base, payload, { controls: `<div class="regions-controls">${seasons}${finder}</div>`, teams, views, share: has ? shareButton("map") : "" });
       const layer = countyLayer(payload, county);
       const wanted = teamSlug(route.team, payload.schools);
@@ -3103,31 +3115,6 @@ async function renderCounties(token) {
   document.title = pageTitle(null, null, "counties");
 }
 
-// The Counties page's share sheet: its images ({ title, when, kinds, initial, view, season }, as
-// mapsShareSpec takes them), set by the view that's on screen; null while it has none (a county with no
-// school).
-let countyShare = null;
-
-/** A county's own image for a season of regions: { key, label, file, name, alt }. */
-function countyKind(county, option, key = "county") {
-  const slug = countiesPath(county).split("/").pop();
-  return {
-    key, label: `${countyTitle(county)}, ${option.label}`, file: `${option.season}/county/${slug}`,
-    name: `${slug}-county-${option.season}`, alt: `${countyTitle(county)}’s MHSAA schools and their regions, ${option.label}`,
-  };
-}
-
-/** A county against the regions before (drawn for every season that has some): its image, or null. */
-function countyCompareKind(county, index, newer) {
-  const before = index.options.find((o) => o.seasons.includes(newer.season - 1));
-  if (!before) return null;
-  const slug = countiesPath(county).split("/").pop();
-  return {
-    key: "county-compare", label: `${before.label} vs. ${newer.label}`, file: `${newer.season}/county-compare/${slug}`,
-    name: `${slug}-county-${before.season}-vs-${newer.season}`, alt: `${countyTitle(county)}: ${before.label} vs. ${newer.label}`,
-  };
-}
-
 // A county's Compare: the second map's season (?vs=, or by default the regions before the first's), and
 // what the bar says each view shows.
 let countyCompareVs = null;
@@ -3158,14 +3145,10 @@ async function renderCountyCompare(token, index, base, county, { finder, views }
   const sides = [{ key: "a", option: first, payload: pa }, { key: "b", option: second, payload: pb }];
   const [older, newer] = second.season < first.season ? [second, first] : [first, second];
   countyCompareLine = `${older.label} vs. ${newer.label}`;
-  // The two drawn together when they're back to back; each map's own (where the county had a school).
-  const together = older !== newer && older.seasons.includes(newer.season - 1) ? countyCompareKind(county, index, newer) : null;
-  const own = sides.filter((x) => x.payload.schools.some((r) => r.county === county))
-    .map((x) => countyKind(county, x.option, `county-${x.key}`));
-  const kinds = [together, ...own].filter(Boolean).filter((k, i, all) => all.findIndex((o) => o.file === k.file) === i);
-  countyShare = kinds.length ? { title: `Share ${countyTitle(county)}, compared`, when: countyCompareLine, view: "county-compare", season: newer.season, kinds } : null;
+  // Something to share: the county had a school on one of the maps (its images are drawn then).
+  const shareable = sides.some((x) => x.payload.schools.some((r) => r.county === county));
   app.innerHTML = countyComparePage(county, base, sides[0], sides[1], index, {
-    controls: `<div class="regions-controls">${finder}</div>`, teams, views, share: kinds.length ? shareButton("map") : "",
+    controls: `<div class="regions-controls">${finder}</div>`, teams, views, share: shareable ? shareButton("map") : "",
   });
   // A school by its name in a season: picked on each map it's on, where it is said on the other.
   const rowIn = (side, p) => namesIn(p.name, p.season, side.option.season)
@@ -3235,12 +3218,7 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
   // Seasons in a row whose schools, classes and regions in the county are the same are one map.
   const seasons = mergeSameSeasons(options.map((option, i) => ({ option, payload: payloads[i] })), (s) => countySeasonKey(s.payload, county));
   countyTimelineLine = timelineSpan(seasons);
-  const slug = countiesPath(county).split("/").pop();
   const has = seasons.some((x) => x.payload.schools.some((r) => r.county === county));
-  countyShare = has ? {
-    title: `Share ${countyTitle(county)}’s timeline`, when: countyTimelineLine, view: "county-timeline", season: null,
-    kinds: [{ key: "county-timeline", label: countyTitle(county), file: `timeline/county/${slug}`, name: `${slug}-county-timeline`, alt: `${countyTitle(county)}’s MHSAA schools, ${countyTimelineLine}` }],
-  } : null;
   app.innerHTML = countyTimelinePage(county, base, seasons, { controls: `<div class="regions-controls">${finder}${timelineSteps()}</div>`, views, teams, share: has ? shareButton("map") : "" });
   // A school picked on one map is picked on every map it's on (by its name that season), and the others
   // say where it was, as Compare's two maps do.
@@ -3666,172 +3644,75 @@ function findRegionsTeam(name) {
 }
 
 /**
- * The Regions page's images: the class's map, or (with a team picked) its region and its two
- * regions compared, light or dark. Drawn for every season the page offers.
+ * A Maps or Counties page's share sheet, from its model (mapshare.js): the same rows on every view.
+ * Share (a dropdown: the class or a team; every county or one), Show (One season | Compare | Timeline),
+ * the season (or the two, or every season), and the theme. *initial* is what the page shows: { subject,
+ * view, season }. Every option names an image that's drawn; one that isn't is greyed out, with a note.
  */
-function regionsShareSpec() {
-  const { clazz, season, option, payload, picked } = regionsState;
-  const prior = payload.prior_season;
-  const kinds = [
-    { key: "class", label: `Class ${clazz}A` },
-    ...(prior ? [{ key: "class-compare", label: `${clazz}A, ${prior} vs. ${season}` }] : []),
-    ...(picked ? [{ key: "team", label: picked.school }] : []),
-    ...(picked && picked.before && prior ? [{ key: "compare", label: `${picked.school}, ${prior} vs. ${season}` }] : []),
-  ];
-  // Where each is: regions/2027/5a-light.png, compare/5a-light.png, team/greenwood-light.png, compare/greenwood-light.png.
-  const file = (c) => ({
-    class: `${clazz}a-${c.theme}`,
-    "class-compare": `compare/${clazz}a-${c.theme}`,
-    team: `team/${picked?.slug}-${c.theme}`,
-    compare: `compare/${picked?.slug}-${c.theme}`,
-  })[c.image];
-  const what = (c) => ({
-    class: `class-${clazz}a-regions`,
-    "class-compare": `class-${clazz}a-regions-${prior}-vs-${season}`,
-    team: `${picked?.slug}-regions`,
-    compare: `${picked?.slug}-regions-${prior}-vs-${season}`,
-  })[c.image];
-  const label = (c) => ({
-    class: `Class ${clazz}A regions, ${option.label}`,
-    "class-compare": `Class ${clazz}A regions, ${prior} vs. ${option.label}`,
-    team: `${picked?.school}: ${regionPlace(picked)}`,
-    compare: `${picked?.school}: ${prior} region vs. ${season} region`,
-  })[c.image];
+function mapsSheetSpec(model, initial, event) {
   return {
-    title: picked ? `Share ${picked.school}’s region` : `Share Class ${clazz}A’s regions`,
-    when: `${option.label} ${option.seasons.length > 1 ? "seasons" : "season"}`,
-    groups: () => [
-      ...(kinds.length > 1 ? [{ label: "Image", key: "image", options: kinds }] : []),
+    title: (c) => model.title(c),
+    when: (c) => model.when(c),
+    groups: (c) => [
+      { label: "Share", key: "subject", options: model.subjects, select: true },
+      { label: "Show", key: "view", options: model.viewOptions(c), note: model.viewNote(c) },
+      { label: c.view === "season" ? "Season" : "Seasons", key: c.view === "timeline" ? "span" : "season", options: model.seasons(c), note: model.seasonNote(c) },
       { label: "Theme", key: "theme", options: SHARE_THEMES },
     ],
-    defaults: { image: picked ? "team" : "class", theme: document.documentElement.classList.contains("dark") ? "dark" : "light" },
+    defaults: { ...initial, span: "all", theme: document.documentElement.classList.contains("dark") ? "dark" : "light" },
+    fix: (c) => model.fix(c),
     pages: () => 1,
-    path: (c) => `/static/regions/${season}/${file(c)}.png`,
+    path: (c) => `/static/regions/${model.file(c)}-${c.theme}.png`,
     version: null,
-    name: (c) => `${what(c)}-${season}.png`,
-    label,
-    page: `${location.origin}/maps/regions/${clazz}a${(() => {
-      const q = new URLSearchParams();
-      if (season !== regionsDefault) q.set("season", season);
-      if (picked) q.set("team", picked.slug);
-      return q.toString() ? `?${q}` : ""; // (not q.size: older Safari doesn't have it)
-    })()}`,
-    latest: true,
-    track: (c, method) => track("regions_image_shared", { class: clazz, season, team: picked?.school ?? null, image: c.image, theme: c.theme, method }),
-  };
-}
-
-/**
- * A Maps view's share sheet, from its images (*kinds*: [{ key, label, file, name, alt }], *file* under
- * /static/regions/ without "-{theme}.png", *name* the download's name without ".png", *alt* the image's
- * description), the first one shown unless *initial* says otherwise. *page* is the view's address.
- */
-function mapsShareSpec({ title, when, kinds, initial, page, view, season }) {
-  const kind = (c) => kinds.find((k) => k.key === c.image) ?? kinds[0];
-  return {
-    title,
-    when,
-    groups: () => [
-      ...(kinds.length > 1 ? [{ label: "Image", key: "image", options: kinds.map(({ key, label }) => ({ key, label })) }] : []),
-      { label: "Theme", key: "theme", options: SHARE_THEMES },
-    ],
-    defaults: { image: initial ?? kinds[0].key, theme: document.documentElement.classList.contains("dark") ? "dark" : "light" },
-    pages: () => 1,
-    path: (c) => `/static/regions/${kind(c).file}-${c.theme}.png`,
-    version: null,
-    name: (c) => `${kind(c).name}.png`,
-    label: (c) => kind(c).alt,
-    page,
+    name: (c) => `${model.name(c)}.png`,
+    label: (c) => model.label(c),
+    page: (c) => `${location.origin}${model.page(c)}`,
     latest: true,
     track: (c, method) => track("regions_image_shared", {
-      class: regionsState?.clazz ?? null, season, team: route.teamName ?? null, image: c.image, theme: c.theme, method, view,
-      ...(route.page === "counties" ? { county: route.countyName ?? null } : {}),
+      ...event, ...model.track(c), season: c.view === "timeline" ? null : Number(c.season), view: c.view, theme: c.theme, method,
     }),
   };
 }
 
-/**
- * The Compare view's images: the two maps compared, when they're back to back (the class's, if both
- * show one class; the followed team's, if it was in a region in both), and each map's own (its class,
- * and the followed team's region on it). Any other pair isn't drawn together: each map's image goes
- * with the page's link.
- */
-function compareShareSpec() {
-  const { sides, rows } = regionsState.compare;
-  const [older, newer] = sides[0].season < sides[1].season ? [sides[0], sides[1]] : [sides[1], sides[0]];
-  const newerRow = rows[sides.indexOf(newer)];
-  const prior = newer.season - 1;
-  const backToBack = older !== newer && older.option.seasons.includes(prior);
-  const kinds = [];
-  if (backToBack && newerRow?.before) {
-    kinds.push({
-      key: "compare", label: `${newerRow.school}, ${prior} vs. ${newer.option.label}`,
-      file: `${newer.season}/compare/${newerRow.slug}`, name: `${newerRow.slug}-regions-${prior}-vs-${newer.season}`,
-      alt: `${newerRow.school}: ${prior} region vs. ${newer.season} region`,
-    });
-  }
-  if (backToBack && older.clazz === newer.clazz) {
-    kinds.push({
-      key: "class-compare", label: `${newer.clazz}A, ${prior} vs. ${newer.option.label}`,
-      file: `${newer.season}/compare/${newer.clazz}a`, name: `class-${newer.clazz}a-regions-${prior}-vs-${newer.season}`,
-      alt: `Class ${newer.clazz}A regions, ${prior} vs. ${newer.option.label}`,
-    });
-  }
-  for (const [i, side] of sides.entries()) {
-    const key = i === 0 ? "a" : "b";
-    const row = rows[i];
-    if (row && row.class === side.clazz) {
-      kinds.push({
-        key: `team-${key}`, label: `${row.school}, ${side.option.label}`,
-        file: `${side.season}/team/${row.slug}`, name: `${row.slug}-regions-${side.season}`,
-        alt: `${row.school}: ${regionPlace(row)}, ${side.option.label}`,
-      });
-    }
-    kinds.push({
-      key: `class-${key}`, label: `${side.clazz}A, ${side.option.label}`,
-      file: `${side.season}/${side.clazz}a`, name: `class-${side.clazz}a-regions-${side.season}`,
-      alt: `Class ${side.clazz}A regions, ${side.option.label}`,
-    });
-  }
-  const unique = kinds.filter((k, i) => kinds.findIndex((o) => o.file === k.file) === i);
-  const team = route.teamName ? unique.find((k) => ["compare", "team-a", "team-b"].includes(k.key)) : null;
-  return mapsShareSpec({
-    // Named for what's compared: the followed team's regions, or the class's (or the two classes').
-    title: route.teamName ? `Share ${route.teamName}’s regions, compared`
-      : older.clazz === newer.clazz ? `Share Class ${newer.clazz}A’s regions, compared`
-        : `Share Class ${older.clazz}A’s and ${newer.clazz}A’s regions, compared`,
-    when: `${older.option.label} vs. ${newer.option.label}`,
-    kinds: unique,
-    initial: team?.key ?? null,
-    page: `${location.origin}${location.pathname}${location.search}`,
-    view: "compare",
-    season: newer.season,
-  });
+/** Every season's regions file, by season. */
+async function regionsPayloads(index) {
+  const all = await Promise.all(index.options.map((o) => regionsFile(`${o.season}.json`)));
+  return Object.fromEntries(index.options.map((o, i) => [o.season, all[i]]));
 }
 
-/** The Timeline view's images: the page's class over every season, and the followed team's. */
-function timelineShareSpec() {
-  const { clazz } = regionsState;
-  const { follow, span } = regionsState.timeline;
-  const kinds = [];
-  if (follow) {
-    kinds.push({
-      key: "team-timeline", label: follow.name, file: `timeline/team/${follow.slug}`,
-      name: `${follow.slug}-regions-timeline`, alt: `${follow.name}’s regions, ${span}`,
-    });
-  }
-  kinds.push({
-    key: "class-timeline", label: `Class ${clazz}A`, file: `timeline/${clazz}a`,
-    name: `class-${clazz}a-regions-timeline`, alt: `Class ${clazz}A regions, ${span}`,
-  });
-  return mapsShareSpec({
-    title: follow ? `Share ${follow.name}’s timeline` : `Share Class ${clazz}A’s timeline`,
-    when: span,
-    kinds,
-    page: `${location.origin}${location.pathname}${location.search}`,
-    view: "timeline",
-    season: null,
-  });
+/** The view a Maps address shows, as the share sheet names it. */
+const sheetView = () => (route.view === "compare" ? "compare" : route.view === "timeline" ? "timeline" : "season");
+
+/**
+ * The Maps page's share sheet: the page's class (Compare's two), any of their teams, opened on what
+ * the page shows (its view, its season or the newer of the two, the team it follows).
+ */
+async function regionsSheetSpec() {
+  const index = await regionsFile("index.json");
+  const payloads = await regionsPayloads(index);
+  const view = sheetView();
+  const compare = view === "compare" ? regionsState.compare : null;
+  const newer = compare ? [...compare.sides].sort((a, b) => b.season - a.season)[0] : null;
+  const classes = compare ? [...new Set([newer.clazz, ...compare.sides.map((x) => x.clazz)])] : [regionsState.clazz];
+  const model = regionsShareModel(index, payloads, classes);
+  // The team the page follows, under its newest name, if it's one the sheet offers.
+  const name = view === "timeline" ? regionsState.timeline?.follow?.name : route.teamName ?? regionsState.picked?.school;
+  const newest = Math.max(...index.options.map((o) => o.season));
+  const team = name ? index.options.map((o) => `team:${nameIn(name, o.season, newest)}`).find((k) => model.subjects.some((x) => x.key === k)) : null;
+  const season = String(newer?.season ?? (view === "timeline" ? route.season ?? index.default : regionsState.season));
+  return mapsSheetSpec(model, { subject: team ?? `class:${newer?.clazz ?? regionsState.clazz}`, view, season: String(pickOption(index, Number(season)).season) }, {});
+}
+
+/** The Counties page's share sheet: every county's map, or any county's, opened on what the page shows. */
+async function countiesSheetSpec() {
+  const index = await regionsFile("index.json");
+  const [payloads, base] = await Promise.all([regionsPayloads(index), regionsFile("map.json")]);
+  const model = countiesShareModel(index, payloads, base.counties.map((c) => c.name));
+  const view = route.countyName ? sheetView() : "season";
+  const first = pickOption(index, route.season).season;
+  const season = view === "compare" && countyCompareVs ? Math.max(first, countyCompareVs) : first;
+  const subject = route.countyName && model.subjects.some((x) => x.key === `county:${route.countyName}`) ? `county:${route.countyName}` : "all";
+  return mapsSheetSpec(model, { subject, view, season: String(pickOption(index, season).season) }, { class: null, team: null });
 }
 
 // ------------------------------------------------------------- feedback

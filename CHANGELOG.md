@@ -5,6 +5,21 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.43.0
+
+One share sheet on every Maps view (a class's Season, Compare and Timeline, and the Counties pages),
+with the same rows in the same order:
+
+- **Share:** a dropdown of the class (Compare's two classes) and every team that's been in it, or
+  every county and each county.
+- **Show:** One season, Compare or Timeline, from any view.
+- **Season:** each season; each season against the one before; or, on the Timeline, every season.
+- **Theme:** Light or Dark.
+
+It opens on what the page shows. A choice with no image (a season a team wasn't in a region, a
+county without a school) is greyed out, with a note saying why. The link shared with an image is
+the Maps view that shows it.
+
 ## 1.42.1
 
 - The share sheet's preview shows the whole image in Safari: it could be drawn as wide as the frame

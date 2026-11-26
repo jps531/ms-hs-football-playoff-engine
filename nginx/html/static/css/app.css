@@ -1831,6 +1831,10 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 }
 .share-sheet .half-control { margin-bottom: 0; display: flex; flex-wrap: wrap; }
 .share-sheet .half-control__item { flex: 1 1 auto; min-height: 40px; }
+/* A choice with no image (a season a team wasn't in a region): greyed out, with a note below saying why. */
+.share-sheet .half-control__item:disabled { color: var(--text-secondary); opacity: 0.45; cursor: not-allowed; }
+.share-sheet .half-control__item:disabled:hover { color: var(--text-secondary); }
+.share-sheet__note { margin: 0; font-size: 13px; line-height: 18px; }
 /* A fixed height (not an aspect ratio, which a max-height can't hold against a 2000px image) with
    the image fitted inside it. */
 .share-sheet__frame {
