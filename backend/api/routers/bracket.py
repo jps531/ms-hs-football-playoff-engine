@@ -20,8 +20,7 @@ from backend.helpers.api_helpers import (
     _candidate_seeds_by_region,
     _compute_seed_atoms_if_pre_playoff,
     _load_all_region_odds,
-    _load_and_build_playoff_bracket_state,
-    _load_elo_ratings,
+    _load_playoff_bracket_state,
     _resolve_slot_group,
     as_standings_odds,
     build_bracket_layout,
@@ -121,10 +120,7 @@ async def get_bracket(
         by_region = await _load_all_region_odds(conn, season, class_, as_of)
         if not by_region:
             raise HTTPException(status_code=404, detail=f"No standings data for {class_}A season {season}")
-        elo_ratings = await _load_elo_ratings(conn, season, as_of)
-        state = await _load_and_build_playoff_bracket_state(
-            conn, season, class_, as_of, [], elo_ratings, c.slots
-        )
+        state = await _load_playoff_bracket_state(conn, season, class_, as_of)
         venue = await load_championship_venue(conn, season, class_)
         home_venues = await load_home_venues(conn) if state is not None else {}
 
@@ -330,10 +326,7 @@ async def simulate_bracket(
     async with get_conn() as conn:
         c = await load_class_bracket_inputs(conn, season, class_, as_of)
         slots = c.slots
-        elo_ratings = await _load_elo_ratings(conn, season, as_of)
-        state = await _load_and_build_playoff_bracket_state(
-            conn, season, class_, as_of, body.results, elo_ratings, slots
-        )
+        state = await _load_playoff_bracket_state(conn, season, class_, as_of)
         by_region = await _load_all_region_odds(conn, season, class_, as_of)
         if not by_region:
             raise HTTPException(

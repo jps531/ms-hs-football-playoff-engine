@@ -11,10 +11,6 @@ from fastapi import HTTPException
 from backend.api.models.requests import BracketGameResultRequest, ParticipantRef
 from backend.api.models.responses import (
     BracketAdvancementOdds,
-    BracketGame,
-    BracketLayout,
-    BracketParticipant,
-    ChampionshipGame,
     HomeGameOdds,
     PathConditionModel,
     PathOutcomeModel,
@@ -24,12 +20,8 @@ from backend.api.models.responses import (
 )
 from backend.helpers.api_helpers import (
     CLINCHED_THRESHOLD,
-    PlayoffBracketState,
-    _collect_possible_opponents,
     _compute_seed_atoms_if_pre_playoff,
-    _find_bracket_survivor,
     _resolve_ref_to_school,
-    _resolve_ref_to_slot_id,
     _unpack_hosting_odds_row,
     attach_hosting_scenarios,
     build_attended_game_models,
@@ -41,7 +33,6 @@ from backend.helpers.api_helpers import (
     build_helmet_game_worn,
     build_helmet_stats_fields,
     build_hosting_entries,
-    build_playoff_bracket_state,
     build_rank_entry,
     build_ranked_teams_query,
     build_region_summary_card,
@@ -56,7 +47,6 @@ from backend.helpers.api_helpers import (
     current_season,
     current_standings_order,
     default_classes_for_season,
-    eliminated_team_hosting,
     filter_remaining_after_simulation,
     filter_scenarios_by_simulation,
     filter_to_team_or_404,
@@ -2225,124 +2215,6 @@ def _school_to_seed_4teams() -> dict[str, tuple[int, int]]:
     }
 
 
-class TestBuildPlayoffBracketState:
-    """build_playoff_bracket_state is a pure function — fully unit-testable."""
-
-    def _base_state(self, submitted=None, db_wins=None, db_losers=None):
-        """Return a PlayoffBracketState built from a fixed 4-team bracket for use in tests."""
-        return build_playoff_bracket_state(
-            school_to_seed=_school_to_seed_4teams(),
-            db_wins=db_wins or {},
-            db_losers=db_losers or set(),
-            submitted_results=submitted or [],
-            elo_ratings={},
-            slots=SLOTS_5A_7A_2025,
-            season=2025,
-            clazz=5,
-        )
-
-    def test_returns_playoff_bracket_state(self):
-        """Return type is PlayoffBracketState."""
-        assert isinstance(self._base_state(), PlayoffBracketState)
-
-    def test_all_alive_with_no_results(self):
-        """Without any results all schools are alive (p_playoffs=1.0)."""
-        state = self._base_state()
-        for reg_odds in state.all_region_odds.values():
-            for so in reg_odds.values():
-                assert so.p_playoffs == pytest.approx(1.0)
-
-    def test_submitted_winner_gets_win_credit(self):
-        """Submitted winner's win count increments by 1."""
-        state = self._base_state(submitted=[_game_result("AlphaS1", "BetaS1")])
-        assert state.wins_by_team.get("AlphaS1", 0) == 1
-
-    def test_submitted_loser_is_eliminated(self):
-        """Submitted loser's slot has p_playoffs=0.0 in all_region_odds."""
-        state = self._base_state(submitted=[_game_result("AlphaS1", "BetaS1")])
-        loser_odds = state.all_region_odds[2]["BetaS1"]
-        assert loser_odds.p_playoffs == pytest.approx(0.0)
-        assert loser_odds.eliminated is True
-
-    def test_db_loser_overridden_by_submitted_winner(self):
-        """A school marked as DB loser but also submitted as winner stays alive."""
-        state = self._base_state(
-            db_losers={"AlphaS1"},
-            submitted=[_game_result("AlphaS1", "BetaS1")],
-        )
-        alpha_odds = state.all_region_odds[1]["AlphaS1"]
-        assert alpha_odds.p_playoffs == pytest.approx(1.0)
-        assert alpha_odds.eliminated is False
-
-    def test_cross_region_wins_populated(self):
-        """cross_region_wins maps (region, seed) → confirmed wins."""
-        state = self._base_state(submitted=[_game_result("AlphaS1", "BetaS1")])
-        assert state.cross_region_wins.get((1, 1), 0) == 1
-
-    def test_eliminated_hosting_map_contains_losers(self):
-        """eliminated_hosting_map is keyed by losers' school names."""
-        state = self._base_state(submitted=[_game_result("AlphaS1", "BetaS1")])
-        assert "BetaS1" in state.eliminated_hosting_map
-
-    def test_no_elo_ratings_matchup_fn_is_none(self):
-        """matchup_fn is None when elo_ratings is empty."""
-        state = self._base_state()
-        assert state.matchup_fn is None
-
-    def test_with_elo_ratings_matchup_fn_is_not_none(self):
-        """matchup_fn is set when elo_ratings are provided."""
-        state = build_playoff_bracket_state(
-            school_to_seed=_school_to_seed_4teams(),
-            db_wins={},
-            db_losers=set(),
-            submitted_results=[],
-            elo_ratings={"AlphaS1": 1500.0, "AlphaS2": 1400.0, "BetaS1": 1480.0, "BetaS2": 1420.0},
-            slots=SLOTS_5A_7A_2025,
-            season=2025,
-            clazz=5,
-        )
-        assert state.matchup_fn is not None
-
-    def test_unresolvable_winner_name_gets_no_win_credit(self):
-        """A winner ref naming a school not in school_to_seed resolves via
-        _resolve_ref_to_school but is skipped (lines 1339->1337, 1349->1351) —
-        no win credit and no submitted_winners membership.
-        """
-        state = self._base_state(submitted=[_game_result("NotClinchedYet", "AlphaS1")])
-        assert state.wins_by_team.get("NotClinchedYet", 0) == 0
-        # AlphaS1 was the named loser here but the "winner" side is unresolvable,
-        # so AlphaS1 still gets marked eliminated via the loser branch.
-        assert state.all_region_odds[1]["AlphaS1"].eliminated is True
-
-    def test_unresolvable_loser_name_is_not_marked_eliminated(self):
-        """A loser ref naming a school not in school_to_seed is skipped
-        (line 1353->1347) — no seed gets added to losers_known for it."""
-        state = self._base_state(submitted=[_game_result("AlphaS1", "NotClinchedYet")])
-        # The only real seed here is the winner (AlphaS1), which is not eliminated;
-        # no exception is raised trying to mark the unresolvable loser's seed.
-        assert state.all_region_odds[1]["AlphaS1"].eliminated is False
-
-    def test_unresolvable_loserless_winner_sets_no_ceiling(self):
-        """A loser-less result whose winner ref is unresolvable does not reach
-        _collect_possible_opponents (line 1355->1347) — round_ceiling stays empty.
-        """
-        layout = build_bracket_layout(SLOTS_5A_7A_2025)
-        state = build_playoff_bracket_state(
-            school_to_seed=_school_to_seed_4teams(),
-            db_wins={},
-            db_losers=set(),
-            submitted_results=[
-                BracketGameResultRequest(winner=ParticipantRef(school="NotClinchedYet"), round="quarterfinals")
-            ],
-            elo_ratings={},
-            slots=SLOTS_5A_7A_2025,
-            season=2025,
-            clazz=5,
-            layout=layout,
-        )
-        assert state.round_ceiling == {}
-
-
 # ---------------------------------------------------------------------------
 # TestBuildBracketEntries
 # ---------------------------------------------------------------------------
@@ -2353,188 +2225,13 @@ class TestBuildPlayoffBracketState:
 # ---------------------------------------------------------------------------
 
 
-class TestEliminatedTeamHosting:
-    """eliminated_team_hosting produces a deterministic (r1, r2, qf, sf) tuple for
-    a team eliminated in round rounds_played, resolving each round's opponent via
-    _find_bracket_survivor as rounds_played increases.
-    """
-
-    def test_resolves_qf_opponent_5a7a(self):
-        """5A-7A: a team eliminated after 2 rounds (rounds_played=2) resolves its QF
-        opponent via _find_bracket_survivor (lines 1165-1204's QF branch), producing
-        a non-None qf value while sf stays None (round not yet played).
-        """
-        result = eliminated_team_hosting(
-            region=1,
-            seed=1,
-            rounds_played=2,
-            slots=SLOTS_5A_7A_2025,
-            seed_to_school={(2, 2): "Opp"},
-            wins_by_team={"Opp": 1},
-            season=2025,
-            clazz=5,
-        )
-        r1, r2, qf, sf = result
-        assert r1 == pytest.approx(1.0)  # R1s1 hosts R1
-        assert r2 is None  # 5A-7A has no second round
-        assert qf is not None
-        assert sf is None  # rounds_played=2 < rounds_for_sf=3
-
-    def test_resolves_r2_and_sf_1a4a(self):
-        """1A-4A: a team eliminated after 4 rounds resolves R2 (line 1165-1173) and
-        SF (near line 1199-1204) opponents via _find_bracket_survivor.
-        """
-        # North half slot layout (indices 0-7): [0] (1,1)v(2,4) [1] (3,2)v(4,3)
-        # [2] (2,1)v(1,4) [3] (4,2)v(3,3) [4] (3,1)v(4,4) [5] (1,2)v(2,3)
-        # [6] (4,1)v(3,4) [7] (2,2)v(1,3). R1s1 (idx 0): R2 opp in [1], QF opp in
-        # [2,3], SF opp in [4-7].
-        result = eliminated_team_hosting(
-            region=1,
-            seed=1,
-            rounds_played=4,
-            slots=SLOTS_1A_4A_2025,
-            seed_to_school={(3, 2): "R2Opp", (2, 1): "QFOpp", (4, 1): "SFOpp"},
-            wins_by_team={"R2Opp": 1, "QFOpp": 2, "SFOpp": 3},
-            season=2025,
-            clazz=1,
-        )
-        r1, r2, qf, sf = result
-        assert r1 == pytest.approx(1.0)
-        assert r2 is not None
-        assert qf is not None
-        assert sf is not None
-
-    def test_returns_partial_when_survivor_not_found(self):
-        """When no confirmed-win candidate exists in the QF opponent slots,
-        _find_bracket_survivor returns None and the tuple stops at qf=None."""
-        result = eliminated_team_hosting(
-            region=1,
-            seed=1,
-            rounds_played=2,
-            slots=SLOTS_5A_7A_2025,
-            seed_to_school={},
-            wins_by_team={},
-            season=2025,
-            clazz=5,
-        )
-        assert result == (1.0, None, None, None)
-
-    def test_idx_none_returns_all_none(self):
-        """When (region, seed) isn't found in the bracket half, every field is None."""
-        result = eliminated_team_hosting(
-            region=1,
-            seed=99,
-            rounds_played=1,
-            slots=SLOTS_5A_7A_2025,
-            seed_to_school={},
-            wins_by_team={},
-            season=2025,
-            clazz=5,
-        )
-        assert result == (None, None, None, None)
-
-    def test_no_r2_survivor_1a4a_stops_at_r2(self):
-        """1A-4A: rounds_played=2 with no confirmed R2-opponent winner stops at r2=None."""
-        result = eliminated_team_hosting(
-            region=1,
-            seed=1,
-            rounds_played=2,
-            slots=SLOTS_1A_4A_2025,
-            seed_to_school={},
-            wins_by_team={},
-            season=2025,
-            clazz=1,
-        )
-        assert result == (1.0, None, None, None)
-
-    def test_rounds_played_less_than_3_stops_at_r2(self):
-        """1A-4A: R2 opponent resolves, but rounds_played=2 < 3 stops before qf."""
-        result = eliminated_team_hosting(
-            region=1,
-            seed=1,
-            rounds_played=2,
-            slots=SLOTS_1A_4A_2025,
-            seed_to_school={(3, 2): "R2Opp"},
-            wins_by_team={"R2Opp": 1},
-            season=2025,
-            clazz=1,
-        )
-        r1, r2, qf, sf = result
-        assert r1 == pytest.approx(1.0)
-        assert r2 is not None
-        assert qf is None
-        assert sf is None
-
-    def test_no_sf_survivor_1a4a_stops_at_sf(self):
-        """1A-4A: qf resolves, but no confirmed SF-opponent winner stops at sf=None."""
-        result = eliminated_team_hosting(
-            region=1,
-            seed=1,
-            rounds_played=4,
-            slots=SLOTS_1A_4A_2025,
-            seed_to_school={(3, 2): "R2Opp", (2, 1): "QFOpp"},
-            wins_by_team={"R2Opp": 1, "QFOpp": 2},
-            season=2025,
-            clazz=1,
-        )
-        r1, r2, qf, sf = result
-        assert r1 == pytest.approx(1.0)
-        assert r2 is not None
-        assert qf is not None
-        assert sf is None
-
-    def test_qf_opponent_of_opponent_r2_resolved(self):
-        """1A-4A: the QF opponent's own R2 opponent is found and factored into qf_home_team."""
-        result = eliminated_team_hosting(
-            region=1,
-            seed=1,
-            rounds_played=3,
-            slots=SLOTS_1A_4A_2025,
-            seed_to_school={(3, 2): "R2Opp", (2, 1): "QFOpp", (4, 2): "OppOfOpp"},
-            wins_by_team={"R2Opp": 1, "QFOpp": 2, "OppOfOpp": 1},
-            season=2025,
-            clazz=1,
-        )
-        r1, r2, qf, sf = result
-        assert r1 == pytest.approx(1.0)
-        assert r2 is not None
-        assert qf is not None
-        assert sf is None
-
-
-class TestFindBracketSurvivor:
-    """_find_bracket_survivor picks the (region, seed) with the most confirmed wins >= min_wins."""
-
-    _SEED_TO_SCHOOL = {(1, 1): "Alpha", (2, 4): "Beta"}
-
-    def test_continues_past_non_improving_candidate(self):
-        """A later slot's team with fewer wins than the current best doesn't replace it."""
-        result = _find_bracket_survivor(
-            [SLOTS_5A_7A_2025[0]],  # (1,1) vs (2,4)
-            min_wins=1,
-            seed_to_school=self._SEED_TO_SCHOOL,
-            wins_by_team={"Alpha": 2, "Beta": 1},
-        )
-        assert result == (1, 1)
-
-    def test_returns_none_when_no_candidate_meets_min_wins(self):
-        """No school in the slots has enough confirmed wins -> None."""
-        result = _find_bracket_survivor(
-            [SLOTS_5A_7A_2025[0]],
-            min_wins=3,
-            seed_to_school=self._SEED_TO_SCHOOL,
-            wins_by_team={"Alpha": 2, "Beta": 1},
-        )
-        assert result is None
-
-
 # ---------------------------------------------------------------------------
 # TestResolveParticipantRef
 # ---------------------------------------------------------------------------
 
 
 class TestResolveParticipantRef:
-    """_resolve_ref_to_school and _resolve_ref_to_slot_id resolution helpers."""
+    """_resolve_ref_to_school resolution."""
 
     _SEED_TO_SCHOOL: dict[tuple[int, int], str] = {
         (1, 1): "AlphaS1",
@@ -2556,17 +2253,6 @@ class TestResolveParticipantRef:
         """A slot ref for an unclinched (unknown) slot returns None."""
         ref = ParticipantRef(region=3, seed=1)
         assert _resolve_ref_to_school(ref, self._SEED_TO_SCHOOL) is None
-
-    def test_resolve_slot_id_correct_format(self):
-        """_resolve_ref_to_slot_id returns 'R{region}S{seed}' for slot refs."""
-        ref = ParticipantRef(region=2, seed=3)
-        assert _resolve_ref_to_slot_id(ref) == "R2S3"
-
-    def test_resolve_slot_id_returns_none_for_school_ref(self):
-        """_resolve_ref_to_slot_id returns None for school-name refs."""
-        ref = ParticipantRef(school="AlphaS1")
-        assert _resolve_ref_to_slot_id(ref) is None
-
 
 # ---------------------------------------------------------------------------
 # TestParticipantRefValidation
@@ -3067,168 +2753,9 @@ class TestBuildEnrichedBracketLayout:
 # ---------------------------------------------------------------------------
 
 
-class TestCollectPossibleOpponents:
-    """_collect_possible_opponents returns R1 seeds on the opponent's bracket branch."""
-
-    def _layout(self):
-        """Base bracket layout for the 5A-7A format used by these tests."""
-        return build_bracket_layout(SLOTS_5A_7A_2025)
-
-    def test_qf_opponents_of_r1s1(self):
-        """QF opponent branch for R1S1 (slot 1, N half) is R1 game at index 1."""
-        # SLOTS_5A_7A_2025 North: game0=(R1S1 vs R2S4), game1=(R2S2 vs R1S3)
-        # QF game0 feeds_from=[0, 1] — R1S1 comes from game0, opponent branch is game1
-        opponents = _collect_possible_opponents(self._layout(), 1, 1, "quarterfinals")
-        assert opponents == {(2, 2), (1, 3)}
-
-    def test_sf_opponents_of_r1s1(self):
-        """SF opponent branch for R1S1 covers all 4 seeds from the other QF sub-tree."""
-        # North SF: QF0 winner vs QF1 winner; QF0 feeds game0+game1, QF1 feeds game2+game3
-        opponents = _collect_possible_opponents(self._layout(), 1, 1, "semifinals")
-        assert opponents == {(2, 1), (1, 4), (1, 2), (2, 3)}
-
-    def test_unknown_winner_returns_empty(self):
-        """Returns empty set when (region, seed) not found in any R1 slot."""
-        opponents = _collect_possible_opponents(self._layout(), 9, 9, "quarterfinals")
-        assert opponents == set()
-
-    def test_invalid_round_returns_empty(self):
-        """Returns empty set for an unrecognized round name."""
-        opponents = _collect_possible_opponents(self._layout(), 1, 1, "championship")
-        assert opponents == set()
-
-    def test_first_round_returns_empty(self):
-        """Returns empty set for first_round (not a valid loser-less round)."""
-        opponents = _collect_possible_opponents(self._layout(), 1, 1, "first_round")
-        assert opponents == set()
-
-    def test_bye_slot_skipped_in_r1_seed_collection(self):
-        """A R1 game with a bye (participant_b=None) on the opponent branch
-        contributes only its non-None participant, not a (None) tuple."""
-        r1_games = [
-            BracketGame(
-                slot=1,
-                participant_a=BracketParticipant(region=1, seed=1),
-                participant_b=BracketParticipant(region=1, seed=2),
-                home_team=BracketParticipant(region=1, seed=1),
-            ),
-            BracketGame(
-                slot=2,
-                participant_a=BracketParticipant(region=2, seed=2),
-                participant_b=None,
-                home_team=BracketParticipant(region=2, seed=2),
-            ),
-        ]
-        sf_game = [BracketGame(feeds_from=[0, 1], round="semifinals")]
-        layout = BracketLayout(halves={"N": [r1_games, sf_game]}, championship=ChampionshipGame())
-        opponents = _collect_possible_opponents(layout, 1, 1, "semifinals")
-        assert opponents == {(2, 2)}
-
-
 # ---------------------------------------------------------------------------
 # TestBuildPlayoffBracketStateLoserless
 # ---------------------------------------------------------------------------
-
-
-class TestBuildPlayoffBracketStateLoserless:
-    """build_playoff_bracket_state handles loser-less results via round-based elimination."""
-
-    def _school_to_seed(self):
-        """8-team school_to_seed fixture matching the North half of SLOTS_5A_7A_2025."""
-        # 8 teams (2 regions × 4 seeds) matching North half of SLOTS_5A_7A_2025
-        return {
-            "R1S1": (1, 1),
-            "R1S2": (1, 2),
-            "R1S3": (1, 3),
-            "R1S4": (1, 4),
-            "R2S1": (2, 1),
-            "R2S2": (2, 2),
-            "R2S3": (2, 3),
-            "R2S4": (2, 4),
-        }
-
-    def _loserless_result(self, winner: str, round_: str) -> BracketGameResultRequest:
-        """Build a submitted result naming only the winner and target round, no loser."""
-        return BracketGameResultRequest(winner=ParticipantRef(school=winner), round=round_)
-
-    def _state(self, submitted):
-        """Build playoff bracket state from ``submitted`` results over the 5A-7A layout."""
-        layout = build_bracket_layout(SLOTS_5A_7A_2025)
-        return build_playoff_bracket_state(
-            school_to_seed=self._school_to_seed(),
-            db_wins={},
-            db_losers=set(),
-            submitted_results=submitted,
-            elo_ratings={},
-            slots=SLOTS_5A_7A_2025,
-            season=2025,
-            clazz=5,
-            layout=layout,
-        )
-
-    def test_winner_gets_win_credit(self):
-        """Winner's win count increments even without a named loser."""
-        state = self._state([self._loserless_result("R1S1", "quarterfinals")])
-        assert state.wins_by_team.get("R1S1", 0) == 1
-
-    def test_possible_opponents_marked_ceiling(self):
-        """All seeds on the opponent QF branch are tracked in round_ceiling (not eliminated)."""
-        state = self._state([self._loserless_result("R1S1", "quarterfinals")])
-        # QF opponents of R1S1: R2S2 and R1S3 (game1 in North R1)
-        assert state.round_ceiling.get((2, 2)) == "quarterfinals"
-        assert state.round_ceiling.get((1, 3)) == "quarterfinals"
-        # They are NOT in losers_known — still have playoff odds
-        assert state.all_region_odds[2]["R2S2"].eliminated is False
-        assert state.all_region_odds[1]["R1S3"].eliminated is False
-
-    def test_winner_not_eliminated(self):
-        """The winner itself is not marked eliminated."""
-        state = self._state([self._loserless_result("R1S1", "quarterfinals")])
-        assert state.all_region_odds[1]["R1S1"].eliminated is False
-
-    def test_non_opponent_seeds_not_eliminated(self):
-        """Seeds outside the opponent branch are unaffected."""
-        state = self._state([self._loserless_result("R1S1", "quarterfinals")])
-        # R2S1 and R1S4 are in a different QF sub-tree — they should still be alive
-        assert state.all_region_odds[2]["R2S1"].eliminated is False
-        assert state.all_region_odds[1]["R1S4"].eliminated is False
-
-    def test_second_loserless_result_keeps_more_restrictive_ceiling(self):
-        """A second loser-less result whose opponent pool overlaps with the first's
-        does not overwrite an already-more-restrictive (earlier-round) ceiling
-        (lines 1358-1371's "keep existing" branch).
-
-        North half slots: [0] R1S1/R2S4  [1] R2S2/R1S3  [2] R2S1/R1S4  [3] R1S2/R2S3.
-        R1S1's semifinals opponent pool is the *other* quarter: {R2S1, R1S4, R1S2,
-        R2S3} (slots 2-3). R2S1's quarterfinals opponent pool (adjacent slot 3) is
-        {R1S2, R2S3} — a subset of R1S1's semifinals pool. Submitting R2S1's
-        quarterfinals result first sets R1S2/R2S3 to "quarterfinals"; R1S1's
-        semifinals result (proposing the later round "semifinals") must not
-        overwrite them.
-        """
-        state = self._state(
-            [
-                self._loserless_result("R2S1", "quarterfinals"),
-                self._loserless_result("R1S1", "semifinals"),
-            ]
-        )
-        assert state.round_ceiling.get((1, 2)) == "quarterfinals"
-        assert state.round_ceiling.get((2, 3)) == "quarterfinals"
-
-    def test_second_loserless_result_upgrades_less_restrictive_ceiling(self):
-        """Submitting the wider (R1S1 semifinals) result first, then the narrower
-        (R2S1 quarterfinals) one, upgrades the overlapping seeds' ceiling to the
-        more restrictive round (the "new_idx < existing_idx" True arm of lines
-        1360-1371). See test above for the opponent-pool layout.
-        """
-        state = self._state(
-            [
-                self._loserless_result("R1S1", "semifinals"),
-                self._loserless_result("R2S1", "quarterfinals"),
-            ]
-        )
-        assert state.round_ceiling.get((1, 2)) == "quarterfinals"
-        assert state.round_ceiling.get((2, 3)) == "quarterfinals"
 
 
 # ---------------------------------------------------------------------------

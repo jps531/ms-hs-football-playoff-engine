@@ -16,7 +16,8 @@ class's bracket:
   game in that round. A game already played keeps its real result. Byes are known.
 - `POST /standings/{clazz}/{region}/simulate`: the bracket and hosting odds come from the region's
   simulated seeding with the other regions' stored seeding.
-- The region-by-region bracket and hosting code these used is gone.
+- The region-by-region bracket and hosting code these used is gone, as is the survivor bookkeeping
+  behind it; `/bracket`'s layout keeps only the seeds, results and venues it shows.
 
 The site doesn't use these endpoints, so nothing on it changes.
 

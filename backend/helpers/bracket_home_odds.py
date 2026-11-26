@@ -812,9 +812,8 @@ def _resolved_opp_in_slots(
     so exactly one team in the opponent slots reached that round and lost.
 
     wins_confirmed is looked up by whatever key all_region_odds itself uses
-    (real school names from hosting.py's wins_by_team, or slot-ID strings from
-    build_bracket_entries' wins_by_slot) rather than assuming a fixed format,
-    since callers use both conventions.
+    (school names, or slot-ID strings such as "R1S2") rather than assuming a
+    fixed format, since callers have used both conventions.
     """
     found: list[tuple[int, int]] = []
     for slot in slots:
