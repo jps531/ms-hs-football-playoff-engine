@@ -5,6 +5,18 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.46.0
+
+A school's look by season: a past season shows the mascot, colors and logo the school had then.
+
+- **Past looks** (mascot and colors) are kept by season, loaded from a checked-in file. The first:
+  Shaw, the Hawks in green and gold through 2019 (standard shades of green and gold, marked as
+  approximate), and the Warriors since.
+- **Logos** follow the seasons each logo was used. A past season with its own look, or with none of
+  the school's logos covering it, shows no logo (the school's initials in its colors) rather than a
+  logo it didn't use then.
+- Every page and image of a season shows that season's looks, the Timeline's each season its own.
+
 ## 1.45.0
 
 Independents on the maps: a school that played a season without a region.

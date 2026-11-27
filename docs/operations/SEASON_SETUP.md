@@ -76,6 +76,26 @@ A season's classes are its own: 1A-6A through 2022, 1A-7A from 2023 (`classes_fo
 Loading a cycle early is safe: the site's current season is the newest one with games (`/seasons`),
 so the loaded season stays out of sight until its schedule is in. Only the Regions page shows it.
 
+## A school's past looks
+
+A school's look now (mascot, colors, logos) is in `schools`. A look it had before (Shaw was the Hawks,
+green and gold, through 2019) goes in `backend/data/school_looks.csv`, one line per look:
+
+```
+school,first_season,last_season,mascot,primary_color,secondary_color,primary_color_hex,secondary_color_hex,approximate,note
+Shaw,,2019,Hawks,Green,Gold,#00843D,#FFC72C,yes,The Shaw Hawks through 2019; ...
+```
+
+`school` is the school's name now. `first_season` blank is as far back as known, `last_season` blank
+still in use. `approximate` is `yes` when the hex colors are standard shades for the named colors
+rather than the school's own. Commit the file, deploy, and run `school-looks-pipeline`, then
+`share-assets`.
+
+`/teams?season=` then gives each school its look that season, so every page and image of a past
+season shows it. Logos follow `team_logos`' seasons (`year_start`, `year_end`, set on /moderate): a
+season with a past look, or covered by none of the school's logos, has no logo, never one the school
+didn't use then.
+
 ## Consolidations, schools that stop playing, and renames
 
 Record these in `backend/helpers/data_helpers.py`, next to the region file:

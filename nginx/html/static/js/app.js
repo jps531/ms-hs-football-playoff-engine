@@ -3223,6 +3223,8 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
   const teams = Object.assign({}, ...helmets); // the newest season's helmet wins
   // Seasons in a row whose schools, classes and regions in the county are the same are one map.
   const seasons = mergeSameSeasons(options.map((option, i) => ({ option, payload: payloads[i] })), (s) => countySeasonKey(s.payload, county));
+  // Each season's map in its own looks (a school's mascot and colors then); merged seasons, the newest's.
+  for (const x of seasons) x.teams = helmets[options.findIndex((o) => o.season === x.option.season)] ?? {};
   countyTimelineLine = timelineSpan(seasons);
   const has = seasons.some((x) => x.payload.schools.some((r) => r.county === county));
   app.innerHTML = countyTimelinePage(county, base, seasons, { controls: `<div class="regions-controls">${finder}${timelineSteps()}</div>`, views, teams, share: has ? shareButton("map") : "" });
@@ -3250,7 +3252,7 @@ async function renderCountyTimeline(token, index, base, county, { finder, views 
       layer: side.layer,
       home: countyHome(base, county),
       href: countiesPath(county),
-      teams,
+      teams: side.teams ?? teams,
       elsewhere: () => notOnMapHtml(picked.name, rowIn(side, picked), side.option.label),
       onPick: (slug, via) => {
         const row = slug && side.layer.schools.find((r) => r.slug === slug);
@@ -3454,6 +3456,8 @@ async function renderTimeline(token, index) {
     }
   }
   const seasons = timelineSeasons(options, payloads, route.clazz, follow);
+  // Each season's map and row in its own looks (a school's mascot and colors then); merged seasons, the newest's.
+  for (const x of seasons) x.teams = helmets[options.findIndex((o) => o.season === x.option.season)] ?? {};
   // (Every season is on the Timeline; the one in the address stays, for the Season view's link.)
   route.teamName = follow?.name ?? null;
   const newest = seasons[seasons.length - 1];
@@ -3477,7 +3481,7 @@ async function renderTimeline(token, index) {
   };
   for (const [i, side] of seasons.entries()) {
     const map = wireRegionsMap(app.querySelector(`.timeline__season[data-index="${i}"]`), base, side.payload, side.clazz, {
-      teams,
+      teams: side.teams ?? teams,
       elsewhere: () => notOnMapHtml(follow.name, null, side.option.label),
       onPick: (slug, via) => {
         const row = slug && side.payload.schools.find((r) => r.slug === slug);

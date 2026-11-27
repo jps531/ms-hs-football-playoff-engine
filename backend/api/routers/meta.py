@@ -86,6 +86,56 @@ _RESOLVED_HELMET_JOIN: LiteralString = """
 """
 
 
+# A team's look in its season (``ss.season``): a past look (school_looks_effective) covering it, else
+# its look now. Its logos: an override always (as before); else the team_logos row covering the
+# season; else none when the school has logos by season but none then, or has a past look then (never
+# a logo it didn't use that year); else its logo now.
+_SEASON_LOOK_JOIN: LiteralString = """
+    LEFT JOIN LATERAL (
+        SELECT l.mascot, l.primary_color, l.secondary_color, l.secondary_color_hex, l.color_variants
+        FROM school_looks_effective l
+        WHERE l.school = s.school AND logo_covers_season(l.first_season, l.last_season, ss.season)
+        ORDER BY l.first_season DESC NULLS LAST
+        LIMIT 1
+    ) lk ON TRUE
+"""
+
+
+def _season_logo(kind: LiteralString) -> LiteralString:
+    """The SQL for a team's *kind* logo ("primary", "secondary", "tertiary") in its season."""
+    return (
+        "COALESCE(NULLIF(s.overrides->>'logo_"
+        + kind
+        + "', ''), (SELECT tl.image_url FROM team_logos tl WHERE tl.school = s.school AND tl.logo_type = '"
+        + kind
+        + "' AND logo_covers_season(tl.year_start, tl.year_end, ss.season)"
+        " ORDER BY tl.is_primary DESC, tl.year_start DESC NULLS LAST LIMIT 1),"
+        " CASE WHEN lk.mascot IS NOT NULL OR lk.primary_color IS NOT NULL OR EXISTS (SELECT 1 FROM team_logos tl"
+        " WHERE tl.school = s.school AND tl.logo_type = '"
+        + kind
+        + "') THEN '' ELSE s.logo_"
+        + kind
+        + " END)"
+    )
+
+
+_LOOKED = "(lk.mascot IS NOT NULL OR lk.primary_color IS NOT NULL)"
+_SEASON_LOOK_COLUMNS: LiteralString = (
+    f"CASE WHEN {_LOOKED} THEN lk.mascot ELSE s.mascot END, "
+    f"CASE WHEN {_LOOKED} THEN lk.primary_color ELSE s.primary_color END, "
+    f"CASE WHEN {_LOOKED} THEN lk.secondary_color ELSE s.secondary_color END, "
+    + _season_logo("primary")
+    + ", "
+    + _season_logo("secondary")
+    + ", "
+    + _season_logo("tertiary")
+)
+_SEASON_LOOK_COLORS: LiteralString = (
+    f"CASE WHEN {_LOOKED} THEN lk.secondary_color_hex ELSE s.secondary_color_hex END, "
+    f"CASE WHEN {_LOOKED} THEN lk.color_variants ELSE s.color_variants END"
+)
+
+
 @router.get("/seasons")
 async def list_seasons() -> list[SeasonModel]:
     """Return the seasons with a schedule: schools enrolled and at least one game, newest first.
@@ -179,14 +229,17 @@ async def list_teams(
     query = sql.SQL(
         """
         SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
-               s.city, s.mascot, s.primary_color, s.secondary_color,
-               s.logo_primary, s.logo_secondary, s.logo_tertiary,
-               s.latitude, s.longitude, s.zip, s.secondary_color_hex,
-               s.color_variants, h.helmet_image
+               s.city, """
+        + _SEASON_LOOK_COLUMNS
+        + """,
+               s.latitude, s.longitude, s.zip, """
+        + _SEASON_LOOK_COLORS
+        + """, h.helmet_image
         FROM schools_effective s
         JOIN school_seasons ss ON s.school = ss.school
         """
         + _RESOLVED_HELMET_JOIN
+        + _SEASON_LOOK_JOIN
         + """
         WHERE {}
         ORDER BY ss.class, ss.region, s.school
@@ -204,14 +257,17 @@ async def get_team(team: str, season: Annotated[int, Query()]) -> TeamModel:
         row = await conn.execute(
             """
             SELECT s.school, s.display_name, ss.season, ss.class, ss.region,
-                   s.city, s.mascot, s.primary_color, s.secondary_color,
-                   s.logo_primary, s.logo_secondary, s.logo_tertiary,
-                   s.latitude, s.longitude, s.zip, s.secondary_color_hex,
-                   s.color_variants, h.helmet_image
+                   s.city, """
+            + _SEASON_LOOK_COLUMNS
+            + """,
+                   s.latitude, s.longitude, s.zip, """
+            + _SEASON_LOOK_COLORS
+            + """, h.helmet_image
             FROM schools_effective s
             JOIN school_seasons ss ON s.school = ss.school
             """
             + _RESOLVED_HELMET_JOIN
+            + _SEASON_LOOK_JOIN
             + """
             WHERE s.school = %s AND ss.season = %s
             """,
