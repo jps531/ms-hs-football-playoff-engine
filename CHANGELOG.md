@@ -13,8 +13,9 @@ A school's look by season: a past season shows the mascot, colors and logo the s
   Shaw, the Hawks in green and gold through 2019 (standard shades of green and gold, marked as
   approximate), and the Warriors since.
 - **Logos** follow the seasons each logo was used. A past season with its own look, or with none of
-  the school's logos covering it, shows no logo (the school's initials in its colors) rather than a
-  logo it didn't use then.
+  the school's logos covering it, shows no logo rather than a logo it didn't use then.
+- **Helmets** already followed each design's seasons; a season with no design of its own shows the
+  plain helmet, now in that season's colors.
 - Every page and image of a season shows that season's looks, the Timeline's each season its own.
 
 ## 1.45.0
