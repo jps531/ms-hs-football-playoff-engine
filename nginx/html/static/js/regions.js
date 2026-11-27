@@ -488,7 +488,8 @@ export function timelineTable(name, seasons, teams = {}) {
   const others = (s, row) => (row.region == null ? [] : s.payload.schools)
     .filter((r) => r.class === row.class && r.region === row.region && !s.rows.includes(r))
     .sort((a, b) => byName(a.school, b.school));
-  const mates = (s, row) => others(s, row).map((r) => `<span class="timeline-table__mate">${teamMark(r.school, teams[r.school], { size: 18 })}${esc(r.school)}</span>`).join("");
+  // (Each season's marks in that season's looks, when it has its own: s.teams.)
+  const mates = (s, row) => others(s, row).map((r) => `<span class="timeline-table__mate">${teamMark(r.school, (s.teams ?? teams)[r.school], { size: 18 })}${esc(r.school)}</span>`).join("");
   const where = (row, named) => `<span class="timeline-table__place">${named ? `${esc(row.school)}: ` : ""}`
     + `${regionChip(row.region)}${esc(place(row))}</span>`;
   // A season before a consolidation has a line for each school merged into it, the season spanning them.

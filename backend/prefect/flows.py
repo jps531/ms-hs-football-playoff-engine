@@ -18,6 +18,7 @@ from backend.prefect.region_scenarios_pipeline import (
     region_scenarios_data_flow,
 )
 from backend.prefect.regions_data_pipeline import regions_data_flow
+from backend.prefect.school_looks_pipeline import school_looks_flow
 from backend.prefect.share_assets_pipeline import share_assets_flow
 from backend.prefect.submission_digest_pipeline import submission_digest_flow
 
@@ -32,6 +33,7 @@ async def main():
     """Run the Data Pipeline flows."""
     await serve(
         await regions_data_flow.to_deployment("regions-data-pipeline"),
+        await school_looks_flow.to_deployment("school-looks-pipeline"),
         await nces_school_data_flow.to_deployment("nces-school-pipeline"),
         await misshsaa_school_data_flow.to_deployment("misshsaa-school-pipeline"),
         # The scores are pulled at 9:00, and the recalculation starts as soon as the pull finishes.
