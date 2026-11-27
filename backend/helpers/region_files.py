@@ -30,9 +30,9 @@ from collections import defaultdict
 from pathlib import Path
 
 from backend.helpers.data_helpers import (
-    SCHOOL_RENAMES,
     SCHOOL_STOPPED_PLAYING,
     SCHOOL_SUCCESSORS,
+    all_renames,
     school_name_for_season,
 )
 from backend.helpers.engine_settings import classes_for_season
@@ -107,7 +107,7 @@ def assignments_for_season(season: int, path: Path | None = None) -> dict[str, P
 
 def new_names(season: int) -> set[str]:
     """Schools that start in *season* under a name the site hasn't had: renames and successors."""
-    return {new for _, new, first in [*SCHOOL_RENAMES, *SCHOOL_SUCCESSORS] if first == season}
+    return {new for _, new, first in [*all_renames(), *SCHOOL_SUCCESSORS] if first == season}
 
 
 def accounted_for(school: str, season: int, assigned: dict) -> bool:
@@ -129,7 +129,7 @@ def problems(assigned: dict[str, Place], season: int, known: set[str], prior: se
     for school in sorted(set(assigned) - allowed):
         out.append(
             f"{school} isn't a school the site knows. Fix the spelling to the site's name, or add it to "
-            f"SCHOOL_RENAMES or SCHOOL_SUCCESSORS (or to schools, for a school that's new)."
+            f"SCHOOL_RENAMES, SCHOOL_NAME_CHANGES or SCHOOL_SUCCESSORS (or to schools, for a school that's new)."
         )
     classes = classes_for_season(season)
     by_class: dict[int, dict[int, int]] = defaultdict(lambda: defaultdict(int))
@@ -152,6 +152,6 @@ def problems(assigned: dict[str, Place], season: int, known: set[str], prior: se
         if not accounted_for(school, season, assigned):
             out.append(
                 f"{school} played in {season - 1} but isn't in {season}'s file. Add it, or record its "
-                f"stop (SCHOOL_STOPPED_PLAYING), rename (SCHOOL_RENAMES) or successor (SCHOOL_SUCCESSORS)."
+                f"stop (SCHOOL_STOPPED_PLAYING), rename (SCHOOL_RENAMES, SCHOOL_NAME_CHANGES) or successor (SCHOOL_SUCCESSORS)."
             )
     return out

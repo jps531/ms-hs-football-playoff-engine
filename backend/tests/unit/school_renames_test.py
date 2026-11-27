@@ -10,6 +10,7 @@ import pytest
 import backend.prefect.ahsfhs_schedule_pipeline as schedule
 from backend.helpers.data_helpers import (
     SCHOOL_CONSOLIDATIONS,
+    SCHOOL_NAME_CHANGES,
     SCHOOL_RENAMES,
     SCHOOL_STOPPED_PLAYING,
     SCHOOL_SUCCESSORS,
@@ -81,8 +82,13 @@ def test_elo_carries_over_from_the_old_name_in_the_first_season_only():
 def test_old_team_links_are_mapped_for_every_rename():
     """routes.js FORMER_SLUGS sends an old ?team= slug to the new name; it must cover every rename."""
     routes = (ROOT / "nginx" / "html" / "static" / "js" / "routes.js").read_text()
+    from backend.helpers.data_helpers import name_in
+
     slugs = dict(re.findall(r'"([a-z0-9-]+)": "([^"]+)"', re.search(r"FORMER_SLUGS = \{([^}]*)\}", routes).group(1)))
-    assert slugs == {slugify(old): new for old, new, _ in [*SCHOOL_RENAMES, *SCHOOL_SUCCESSORS]}
+    # Each old name to the name it has now (McEvans to Shaw), and none for a name taken back (Shaw).
+    now = {old: name_in(old, first - 1, 9999) for old, _, first in [*SCHOOL_RENAMES, *SCHOOL_NAME_CHANGES]}
+    now |= {old: new for old, new, _ in SCHOOL_SUCCESSORS}
+    assert slugs == {slugify(old): new for old, new in now.items() if new != old}
 
 
 def test_every_consolidation_matches_the_renames_successors_and_closures():
@@ -119,6 +125,9 @@ def test_the_maps_compare_knows_every_rename():
     block = re.search(r"SCHOOL_RENAMES = \[(.*?)\];", regions, re.S).group(1)
     found = [(old, new, int(first)) for old, new, first in re.findall(r'\["([^"]+)", "([^"]+)", (\d{4})\]', block)]
     assert found == [tuple(r) for r in SCHOOL_RENAMES]
+    block = re.search(r"SCHOOL_NAME_CHANGES = \[(.*?)\];", regions, re.S).group(1)
+    found = [(old, new, int(first)) for old, new, first in re.findall(r'\["([^"]+)", "([^"]+)", (\d{4})\]', block)]
+    assert found == [tuple(r) for r in SCHOOL_NAME_CHANGES]
 
 
 def test_a_successor_starts_from_its_old_schools_rating_but_keeps_its_own_name_in_the_sources():
@@ -144,3 +153,23 @@ def test_a_schools_names_in_another_season():
     assert names_in("Walnut", 2026, 2028) == ["North Tippah"]
     assert names_in("Walnut", 2026, 2025) == ["Walnut"]
     assert names_in("Greenwood", 2027, 1990) == ["Greenwood"]
+
+
+def test_a_school_renamed_more_than_once_and_the_sources_kept_up():
+    """Shaw was McEvans 2020-22 and Shaw again from 2023; Ruleville Central is Thomas E. Edwards from
+    2019. The sources use the new names, so they're never asked for the old ones."""
+    from backend.helpers.data_helpers import name_in
+
+    assert [school_name_for_season("Shaw", s) for s in (2019, 2020, 2022, 2023, 2026)] == [
+        "Shaw", "McEvans", "McEvans", "Shaw", "Shaw"
+    ]  # fmt: skip
+    assert school_name_for_season("McEvans", 2024) == "Shaw"
+    assert school_name_for_season("Ruleville Central", 2019) == "Thomas E. Edwards"
+    assert source_name_for_season("Thomas E. Edwards", 2026) == "Thomas E. Edwards"
+    assert source_name_for_season("Shaw", 2026) == "Shaw"
+    assert name_in("Shaw", 2017, 2021) == "McEvans" and name_in("Shaw", 2017, 2024) == "Shaw"
+    assert name_in("Shaw", 2024, 2021) == "McEvans" and name_in("Shaw", 2024, 2017) == "Shaw"
+    assert name_in("McEvans", 2021, 2017) == "Shaw"
+    assert name_in("Thomas E. Edwards", 2025, 2016) == "Ruleville Central"
+    assert with_predecessor_ratings({"Shaw": 1000.0}, 2020)["McEvans"] == 1000.0
+    assert with_predecessor_ratings({"McEvans": 990.0}, 2023)["Shaw"] == 990.0

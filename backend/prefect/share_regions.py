@@ -41,7 +41,7 @@ from pathlib import Path
 from PIL import Image
 
 from backend.helpers import region_map
-from backend.helpers.data_helpers import SCHOOL_RENAMES, names_in, school_name_for_season
+from backend.helpers.data_helpers import all_renames, names_in, school_name_for_season
 from backend.helpers.engine_settings import CLASSES
 from backend.helpers.image_jobs import (
     CLASS_REGIONS,
@@ -243,9 +243,10 @@ def timeline_jobs(options: list[dict], seasons: dict[int, list[dict]], teams: di
     for o in ordered:
         for r in seasons[o["season"]]:
             newest[r["school"]] = o["season"]
-    renamed = {old for old, _, _ in SCHOOL_RENAMES}
     for name, season in sorted(newest.items()):
-        if name in renamed:
+        # A name the school left after its last season here is drawn under the name it has now (McEvans
+        # under Shaw); a name it took back (Shaw) or still has is drawn.
+        if any(old == name and first > season for old, _, first in all_renames()):
             continue
         cycles = []
         for o in ordered:

@@ -5,6 +5,24 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.49.0
+
+The regions go back to 2015: every season from 2015 to 2024, from MHSAA's alignments, checked against
+each season's region games. That includes the schools that played without a region (independents),
+and the schools since closed, merged or renamed, each with its town and, where known, its mascot and
+colors.
+
+- **Merged:** Bassfield and Prentiss into Jefferson Davis County (2017), Cleveland and East Side into
+  Cleveland Central (2017), Broad Street and J. F. Kennedy into Northside (2018). The Maps' Timeline
+  follows each merged school back through the schools it came from, and a Bassfield, Cleveland or
+  Broad Street team link for a later season opens the school it became.
+- **Renamed:** Coahoma AHS became Coahoma Early College (2018), Ruleville Central became Thomas E.
+  Edwards (2019), and Shaw was McEvans from 2020 to 2022. A rating and team links carry across a
+  rename.
+- **Stopped playing:** each school's last season and why, among them Benton County (split into
+  Ashland and Hickory Flat for 2017), Coldwater (no team in 2016; it last played in 2022) and Madison
+  St. Joseph (to MAIS after 2020).
+
 ## 1.48.0
 
 /moderate can now correct games, venues and a school's seasons without the API, and lists every
