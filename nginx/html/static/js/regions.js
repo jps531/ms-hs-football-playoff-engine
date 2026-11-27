@@ -1,4 +1,4 @@
-import { breadcrumbs, teamColorStyle, teamMark } from "./components.js";
+import { breadcrumbs, infoButton, teamColorStyle, teamMark } from "./components.js";
 import { escapeHtml as esc } from "./format.js";
 import { slugify } from "./routes.js";
 
@@ -33,19 +33,39 @@ export function seasonsLabel(seasons) {
   return `${seasons.join(" and ")} ${seasons.length > 1 ? "seasons" : "season"}`;
 }
 
-/** "Region 2-5A" (the site's {region}-{class}A). */
+/** "1A Independent": a school that played without a region ("Independent" with no class). */
+const independentPlace = (p) => (p.class ? `${p.class}A Independent` : "Independent");
+
+/** "Region 2-5A" (the site's {region}-{class}A), or "1A Independent". */
 export function place(p) {
-  return p ? `Region ${p.region}-${p.class}A` : "";
+  if (!p) return "";
+  return p.region == null ? independentPlace(p) : `Region ${p.region}-${p.class}A`;
 }
 
-/** "2-5A". */
+/** "2-5A", or "1A Independent". */
 export function shortPlace(p) {
-  return p ? `${p.region}-${p.class}A` : "";
+  if (!p) return "";
+  return p.region == null ? independentPlace(p) : `${p.region}-${p.class}A`;
+}
+
+/** Where a school's region sorts: by number, independents (no region) last. */
+const regionOrder = (s) => s.region ?? 99;
+
+/** What the Independent group says (region_map_image.independents_line). */
+export function independentsLine(seasons) {
+  return `These teams did not participate in a region in ${seasons.join(" and ")}; they were therefore ineligible for the playoffs.`;
+}
+
+/** A region's chip, numbered, or an independent's dashed "I". */
+export function regionChip(region) {
+  return region == null
+    ? `<span class="region-chip region-chip--ind" aria-hidden="true">I</span>`
+    : `<span class="region-chip region-chip--${region}" aria-hidden="true">${region}</span>`;
 }
 
 /**
- * Where a school was the season before, for its line in the list: "4-4A in 2026", "New school";
- * nothing when it was in the same region then.
+ * Where a school was the season before, for its line in the list: "4-4A in 2026", "1A Independent in
+ * 2026", "New school"; nothing when it was in the same place then.
  */
 export function teamNote(school, priorSeason) {
   if (priorSeason == null) return "";
@@ -61,6 +81,7 @@ export function teamChange(school, priorSeason) {
   if (priorSeason == null) return "";
   const was = school.before;
   if (!was) return school.successor_of ? `New school, on ${school.successor_of}’s campus` : `Not in a region in ${priorSeason}`;
+  if ((was.region == null) !== (school.region == null)) return `${place(was)} in ${priorSeason}`; // into or out of a region
   if (was.class !== school.class) return `Moved ${school.class > was.class ? "up" : "down"} from ${place(was)} (${priorSeason})`;
   if (was.region !== school.region) return `Moved from ${place(was)} (${priorSeason})`;
   return `Also ${place(was)} in ${priorSeason}`;
@@ -100,7 +121,8 @@ const byName = (a, b) => {
  */
 export function regionsLists(clazz, payload, currentSeason, teams = {}) {
   const schools = payload.schools.filter((s) => s.class === clazz);
-  const regions = [...new Set(schools.map((s) => s.region))].sort((a, b) => a - b);
+  const regions = [...new Set(schools.map((s) => s.region))].filter((g) => g != null).sort((a, b) => a - b);
+  const independents = schools.filter((s) => s.region == null);
   return regions.map((g) => {
     const href = standingsHref(clazz, g, payload.standings_season, currentSeason);
     const standings = href
@@ -119,7 +141,27 @@ export function regionsLists(clazz, payload, currentSeason, teams = {}) {
     return `<section class="regions-list__region regions-list__region--${g}"><div class="regions-list__head">`
       + `<h2 class="regions-list__name"><span class="region-chip region-chip--${g}" aria-hidden="true">${g}</span>Region ${g}</h2>`
       + `${standings}</div><ul>${items.join("")}</ul></section>`;
-  }).join("");
+  }).join("") + (independents.length ? independentsSection(clazz, payload, independents, teams) : "");
+}
+
+/**
+ * The Independent group, after the regions: its heading, with its dashed chip and an "i" (the provenance
+ * line's) that opens why it has no standings; then its schools, each with where it was the season before.
+ */
+export function independentsSection(clazz, payload, schools, teams = {}) {
+  const items = [...schools].sort((a, b) => byName(a.school, b.school)).map((s) => {
+    const note = teamNote(s, payload.prior_season);
+    return `<li><a class="regions-list__row" href="${esc(regionsPath(clazz))}?team=${esc(s.slug)}" data-team="${esc(s.slug)}">`
+      + `${teamMark(s.school, teams[s.school])}<span class="regions-list__team">${esc(s.school)}</span>`
+      + (note ? `<span class="regions-list__was">${esc(note)}</span>` : "")
+      + "</a></li>";
+  });
+  const help = `independents-help-${clazz}`;
+  return `<section class="regions-list__region regions-list__region--ind"><div class="regions-list__head">`
+    + `<h2 class="regions-list__name"><span class="region-chip region-chip--ind" aria-hidden="true">I</span>Independent`
+    + `${infoButton(help, "Why independents have no standings")}</h2></div>`
+    + `<div class="mode-help regions-list__help" id="${help}" hidden><p>${esc(independentsLine(payload.seasons))}</p></div>`
+    + `<ul>${items.join("")}</ul></section>`;
 }
 
 // ------------------------------------------------------------- the map
@@ -133,9 +175,10 @@ export function regionsLists(clazz, payload, currentSeason, teams = {}) {
 export function classLayer(payload, clazz) {
   return {
     schools: payload.schools.filter((s) => s.class === clazz),
-    group: (s) => String(s.region),
-    color: (s) => s.region,
-    mark: (s) => String(s.region),
+    // An independent is a group of its own (no region to light with it), its dot a dashed "I".
+    group: (s) => (s.region == null ? `ind-${s.slug}` : String(s.region)),
+    color: (s) => s.region ?? "ind",
+    mark: (s) => (s.region == null ? "I" : String(s.region)),
     away: () => false,
     shapes: Object.entries(payload.regions[String(clazz)] ?? {}).map(([g, r]) => ({ group: g, color: Number(g), d: r.d, box: r.box })),
     county: null,
@@ -394,6 +437,7 @@ function classKey(payload, clazz) {
 
 /** A region's members in a season, as one string to compare seasons by. */
 function regionKey(payload, clazz, region) {
+  if (region == null) return ""; // an independent: no region-mates
   return payload.schools.filter((r) => r.class === clazz && r.region === region).map((r) => r.school).sort().join("|");
 }
 
@@ -441,12 +485,12 @@ export function timelineSpan(seasons) {
  * region says so.
  */
 export function timelineTable(name, seasons, teams = {}) {
-  const others = (s, row) => s.payload.schools
+  const others = (s, row) => (row.region == null ? [] : s.payload.schools)
     .filter((r) => r.class === row.class && r.region === row.region && !s.rows.includes(r))
     .sort((a, b) => byName(a.school, b.school));
   const mates = (s, row) => others(s, row).map((r) => `<span class="timeline-table__mate">${teamMark(r.school, teams[r.school], { size: 18 })}${esc(r.school)}</span>`).join("");
   const where = (row, named) => `<span class="timeline-table__place">${named ? `${esc(row.school)}: ` : ""}`
-    + `<span class="region-chip region-chip--${row.region}" aria-hidden="true">${row.region}</span>${esc(place(row))}</span>`;
+    + `${regionChip(row.region)}${esc(place(row))}</span>`;
   // A season before a consolidation has a line for each school merged into it, the season spanning them.
   const body = seasons.map((s) => {
     const season = (n) => `<th scope="row"${n > 1 ? ` rowspan="${n}"` : ""}>${esc(s.option.label)}</th>`;
@@ -540,13 +584,13 @@ export function wholeView(base) {
  * was the season before, and the region's other schools (each picks that school).
  */
 export function pickedHtml(school, payload, teams = {}, color = school.region, href = regionsPath(school.class), chip = null) {
-  const others = payload.schools
+  const others = school.region == null ? [] : payload.schools
     .filter((s) => s.class === school.class && s.region === school.region && s.slug !== school.slug)
     .sort((a, b) => byName(a.school, b.school));
   const facts = [school.county ? `${school.city}, ${school.county} County` : "", teamChange(school, payload.prior_season)].filter(Boolean);
   return `<div class="picked__head">${teamMark(school.school, teams[school.school], { size: 32 })}`
     + `<span class="picked__name">${esc(school.school)}</span>`
-    + `<span class="picked__region">${chip ?? `<span class="region-chip region-chip--${color}" aria-hidden="true">${school.region}</span>`}`
+    + `<span class="picked__region">${chip ?? regionChip(school.region == null ? null : color)}`
     + `<strong>${esc(place(school))}</strong></span></div>`
     + (facts.length ? `<p class="picked__facts">${esc(facts.join(" · "))}</p>` : "")
     + (others.length
@@ -697,7 +741,7 @@ export function hoverHtml(school, team, seasons = [], color = school.region, chi
     + `<span class="map-tip__head">${teamMark(school.school, team, { size: 28 })}`
     + `<span class="map-tip__names"><strong class="map-tip__name">${esc(school.school)}</strong>`
     + (team?.mascot ? `<span class="map-tip__mascot">${esc(team.mascot)}</span>` : "")
-    + `</span></span><span class="map-tip__place">${chip ?? `<span class="region-chip region-chip--${color}" aria-hidden="true">${school.region}</span>`}`
+    + `</span></span><span class="map-tip__place">${chip ?? regionChip(school.region == null ? null : color)}`
     + `<span>${esc(place(school))}${where ? ` · ${esc(where)}` : ""}</span></span>`
     + (seasons.length ? `<span class="map-tip__when">${esc(seasonsLabel(seasons))}</span>` : "")
     + "</span>";
@@ -1179,7 +1223,7 @@ const PLACE_FALLBACK = [1, 3, 7, 4, 5, 6, 2, 8];
  */
 export function countyPlaces(schools) {
   const seen = new Map();
-  for (const s of [...schools].sort((a, b) => b.class - a.class || a.region - b.region)) {
+  for (const s of schools.filter((x) => x.region != null).sort((a, b) => b.class - a.class || a.region - b.region)) {
     const key = `${s.class}-${s.region}`;
     if (!seen.has(key)) seen.set(key, { key, clazz: s.class, region: s.region });
   }
@@ -1213,8 +1257,25 @@ export function countyShades(schools) {
       out.set(p.key, { tone, light, dark, fill: `light-dark(${light.fill}, ${dark.fill})`, ink: `light-dark(${light.ink}, ${dark.ink})` });
     });
   }
+  for (const s of schools.filter((x) => x.region == null)) { // independents: one neutral shade
+    const { light, dark } = INDEPENDENT_SHADE;
+    out.set(placeKey(s), { tone: null, light, dark, fill: `light-dark(${light.fill}, ${dark.fill})`, ink: `light-dark(${light.ink}, ${dark.ink})` });
+  }
   return out;
 }
+
+/** A school's place as a key: "6-3" (class 6A, region 3), or "1-ind" for a 1A independent. */
+export function placeKey(s) {
+  return `${s.class}-${s.region ?? "ind"}`;
+}
+
+/** A school's place on its pill: "3-6A", or "Ind. 1A" for an independent. */
+export function pillText(s) {
+  return s.region == null ? `Ind. ${s.class}A` : `${s.region}-${s.class}A`;
+}
+
+// An independent's pill: neutral gray, in each theme (region_pages.INDEPENDENT_SHADE).
+const INDEPENDENT_SHADE = { light: { fill: "#E4E6E9", ink: "#1B1B1B" }, dark: { fill: "#4A4E55", ink: "#FFFFFF" } };
 
 // The region colors, each theme's (app.css --region-1..8, region_map_image.REGION_COLORS).
 export const REGION_COLORS = {
@@ -1273,9 +1334,9 @@ export function countyShadesObject(schools) {
   return Object.fromEntries(countyShades(schools));
 }
 
-/** A school's place as a pill in its shade: "3-6A". */
+/** A school's place as a pill in its shade: "3-6A", or "Ind. 1A". */
 export function countyPill(school, shade) {
-  return `<span class="county-pill" style="${paint("background", shade, "fill")};${paint("color", shade, "ink")}" aria-hidden="true">${school.region}-${school.class}A</span>`;
+  return `<span class="county-pill" style="${paint("background", shade, "fill")};${paint("color", shade, "ink")}" aria-hidden="true">${esc(pillText(school))}</span>`;
 }
 
 /**
@@ -1285,17 +1346,17 @@ export function countyPill(school, shade) {
 export function countyLayer(payload, county) {
   const mine = payload.schools.filter((s) => s.county === county);
   const shades = countyShades(mine);
-  const key = (s) => `${s.class}-${s.region}`;
+  const key = placeKey;
   // Their regions' other schools, elsewhere: small dots, unnamed (a tooltip names one), to show where the
-  // region reaches.
-  const places = new Set(mine.map(key));
-  const mates = payload.schools.filter((s) => s.county !== county && places.has(key(s)));
+  // region reaches. (An independent has no region: none.)
+  const places = new Set(mine.filter((s) => s.region != null).map(key));
+  const mates = payload.schools.filter((s) => s.county !== county && s.region != null && places.has(key(s)));
   return {
     schools: [...mine, ...mates],
-    group: key,
+    group: (s) => (s.region == null ? `ind-${s.slug}` : key(s)),
     color: () => 0,
     shade: (s) => shades.get(key(s)),
-    mark: (s) => `${s.region}-${s.class}A`,
+    mark: pillText,
     chip: (s) => countyPill(s, shades.get(key(s))),
     pill: true,
     named: true,
@@ -1360,10 +1421,10 @@ export function countyLists(county, payload, teams = {}) {
   const classes = [...new Set(mine.map((s) => s.class))].sort((a, b) => b - a);
   return classes.map((c) => {
     const rows = mine.filter((s) => s.class === c)
-      .sort((a, b) => a.region - b.region || byName(a.school, b.school))
+      .sort((a, b) => regionOrder(a) - regionOrder(b) || byName(a.school, b.school))
       .map((s) => `<li><a class="regions-list__row" href="${esc(countiesPath(county))}?team=${esc(s.slug)}" data-team="${esc(s.slug)}">`
         + `${teamMark(s.school, teams[s.school])}<span class="regions-list__team">${esc(s.school)}</span>`
-        + `<span class="regions-list__was">${countyPill(s, shades.get(`${s.class}-${s.region}`))}`
+        + `<span class="regions-list__was">${countyPill(s, shades.get(placeKey(s)))}`
         + `<span class="visually-hidden">${esc(place(s))}</span>${s.city ? esc(s.city) : ""}</span></a></li>`);
     return `<section class="regions-list__region county-list__class"><div class="regions-list__head">`
       + `<h2 class="regions-list__name">Class ${c}A</h2>`
@@ -1635,7 +1696,7 @@ export function countyTimelineTable(county, seasons, teams = {}) {
       const before = rows[i - 1];
       const changed = r && before && (before.class !== r.class || before.region !== r.region);
       return r
-        ? `<td><span class="timeline-table__place">${countyPill(r, shades[i].get(`${r.class}-${r.region}`))}<span class="visually-hidden">${esc(place(r))}</span>`
+        ? `<td><span class="timeline-table__place">${countyPill(r, shades[i].get(placeKey(r)))}<span class="visually-hidden">${esc(place(r))}</span>`
           + `${changed ? `<span class="timeline-table__changed">changed</span>` : ""}</span></td>`
         : `<td><span class="muted" aria-label="Not on the list">—</span></td>`;
     }).join("");

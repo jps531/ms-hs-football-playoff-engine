@@ -291,3 +291,72 @@ def test_the_class_comparison_lists_the_schools_that_changed_region():
         ImageDraw.ImageDraw.text = original
     assert stayed["school"] in drawn
     assert f"{was['region']} to {was['region'] % 8 + 1}" in drawn
+
+
+# ----------------------------------------------------------------- independents
+
+# A 2017 season with two 1A independents (no region): Hickory Flat (Region 2-1A in 2016) and Coldwater.
+IND17 = [
+    _row("Ashland", 1, 1, 34.8329, -89.1745),
+    _row("Potts Camp", 1, 1, 34.6440, -89.3045),
+    _row("Biggersville", 1, 1, 34.8846, -88.5734),
+    {**_row("Hickory Flat", 1, 1, 34.61371, -89.19164), "region": None},
+    {**_row("Coldwater", 1, 1, 34.68355, -89.97447), "region": None},
+]
+IND16 = [_row("Hickory Flat", 1, 2, 34.61371, -89.19164), *IND17[:3]]
+
+
+def test_an_independents_place_and_its_change():
+    """An independent reads "1A Independent" (or "Independent" with no class); going into or out of a
+    region, its line says where it was."""
+    hickory = IND17[3]
+    assert ri.place(hickory) == ri.short_place(hickory) == "1A Independent"
+    assert ri.place({"class": None, "region": None}) == "Independent"
+    assert ri.change_line(hickory, IND16[0], 2016) == "Region 2-1A in 2016"
+    assert ri.change_line(IND16[0], hickory, 2016) == "1A Independent in 2016"
+    assert ri.independents_line([2017, 2018]) == (
+        "These teams did not participate in a region in 2017 and 2018; they were therefore ineligible for the playoffs."
+    )
+
+
+def test_an_independent_has_no_shape_and_no_region_mates():
+    """Region shapes leave independents out; an independent's image lists no region-mates."""
+    assert set(rm.region_shapes([s for s in IND17 if s["x"] is not None])) == {1}
+    assert ri._members(IND17, IND17[3], "Hickory Flat") == []
+    assert [s["school"] for s in ri._class_rows(IND17, 1)][-2:] == ["Coldwater", "Hickory Flat"]
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_independents_are_drawn_on_every_image(theme):
+    """The class map lists them last (a dashed "I"), and a team's images draw when it's an independent,
+    or was one the season before."""
+    pages = [
+        ri.render_class_regions(1, [2017, 2018], IND17, theme),
+        ri.render_team_region("Hickory Flat", [2017, 2018], IND17, IND16, {}, theme),
+        ri.render_team_region("Coldwater", [2017, 2018], IND17, IND16, {}, theme),
+        ri.render_team_regions_compared("Hickory Flat", [2017, 2018], IND17, IND16, {}, theme),
+        ri.render_class_regions_compared(1, [2017, 2018], IND17, IND16, theme),
+    ]
+    assert all(len(p) == 1 and p[0].size == ri.SIZE for p in pages)
+    assert [p.size for p in ri.render_class_regions_card(1, [2017], IND17)] == [(1200, 630)]
+    assert [p.size for p in ri.render_team_region_card("Hickory Flat", [2017], IND17, IND16, {})] == [(1200, 630)]
+
+
+def test_the_pages_data_keeps_independents_with_a_class():
+    """/teams' independents are in their class's rows (one with no class is on no class's map); the
+    season's data has no shape for them, and they sort after the regions."""
+    from backend.helpers import region_pages as rp
+
+    teams = [
+        {"school": "Ashland", "class_": 1, "region": 1, "latitude": 34.8329, "longitude": -89.1745},
+        {"school": "Hickory Flat", "class_": 1, "region": None, "latitude": 34.61371, "longitude": -89.19164},
+        {"school": "Some Academy", "class_": None, "region": None, "latitude": 33.0, "longitude": -90.0},
+    ]
+    rows = rp.school_rows(teams)
+    assert [(r["school"], r["region"]) for r in rows] == [("Ashland", 1), ("Hickory Flat", None)]
+    option = {"season": 2017, "seasons": [2017], "label": "2017"}
+    payload = rp.season_payload(option, rows, [{**rows[1], "region": 2}], [])
+    assert set(payload["regions"]["1"]) == {"1"}
+    hickory = next(s for s in payload["schools"] if s["school"] == "Hickory Flat")
+    assert hickory["region"] is None and hickory["before"] == {"class": 1, "region": 2}
+    assert "2 schools in 1 regions" in rp.regions_description(1, payload)  # an independent isn't a region
