@@ -62,6 +62,7 @@ from backend.helpers.image_jobs import (
     draw_images,
 )
 from backend.helpers.region_files import REGIONS_DIR
+from backend.helpers.region_map_image import region_order
 from backend.helpers.region_pages import (
     counties_body,
     counties_path,
@@ -164,10 +165,13 @@ def image_jobs(
         before = prior_by.get(r["school"])
         mine = [s for s in rows if s["class"] == r["class"]]
         then = [s for s in prior if before and s["class"] == before["class"]]
-        mates = {s["school"] for s in mine if s["region"] == r["region"]}
+        # (An independent has no region-mates: no region.)
+        mates = {s["school"] for s in mine if s["region"] == r["region"]} if r["region"] is not None else {r["school"]}
         # The season before, cut to what the images show: the team's class then, and its mates' rows.
         shown_prior = then + [s for s in prior if s["school"] in mates and s not in then]
-        former = {s["school"] for s in then if before and s["region"] == before["region"]}
+        former = {
+            s["school"] for s in then if before and before["region"] is not None and s["region"] == before["region"]
+        }
         names = mates | former
         # This season, cut likewise: the team's class, and where its former region-mates are now (in
         # any class), so "Former Region Members" says where each went rather than that it's gone.
@@ -226,7 +230,7 @@ def timeline_jobs(options: list[dict], seasons: dict[int, list[dict]], teams: di
         if not any(c["schools"] for c in cycles):
             continue
         # Seasons in a row with the class's regions the same are one map.
-        cycles = merge_cycles(cycles, lambda c: sorted((r["school"], r["region"]) for r in c["schools"]))
+        cycles = merge_cycles(cycles, lambda c: sorted((r["school"], region_order(r)) for r in c["schools"]))
         for theme in THEMES:
             jobs.append(
                 ImageJob(
@@ -248,18 +252,22 @@ def timeline_jobs(options: list[dict], seasons: dict[int, list[dict]], teams: di
             rows = seasons[o["season"]]
             by_name = {r["school"]: r for r in rows}
             mine = [by_name[n] for n in names_in(name, season, o["season"]) if n in by_name]
-            places = {(r["class"], r["region"]) for r in mine}
+            places = {(r["class"], r["region"]) for r in mine if r["region"] is not None}
             cycles.append(
                 {
                     "seasons": o["seasons"],
                     "rows": mine,
-                    "schools": [r for r in rows if (r["class"], r["region"]) in places],
+                    # Its regions' schools (an independent's only itself: it has no region).
+                    "schools": [r for r in rows if (r["class"], r["region"]) in places or r in mine],
                 }
             )
         # Seasons in a row with the school's region and its members the same are one map.
         cycles = merge_cycles(
             cycles,
-            lambda c: (sorted((r["class"], r["region"]) for r in c["rows"]), sorted(r["school"] for r in c["schools"])),
+            lambda c: (
+                sorted((r["class"], region_order(r)) for r in c["rows"]),
+                sorted(r["school"] for r in c["schools"]),
+            ),
         )
         kwargs = {"school": name, "cycles": cycles, "teams": _colors(teams.get(season) or [], {name})}
         for theme in THEMES:
@@ -334,7 +342,9 @@ def county_jobs(options: list[dict], seasons: dict[int, list[dict]]) -> list[Ima
         # Seasons in a row with the county's schools, classes and regions the same are one map.
         cycles = merge_cycles(
             cycles,
-            lambda c: sorted((r["school"], r["class"], r["region"]) for r in c["schools"] if r.get("county") == county),
+            lambda c: sorted(
+                (r["school"], r["class"], region_order(r)) for r in c["schools"] if r.get("county") == county
+            ),
         )
         if any(c["schools"] for c in cycles):
             for theme in THEMES:

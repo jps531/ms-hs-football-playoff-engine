@@ -667,8 +667,8 @@ scrubberHost.addEventListener("click", (e) => {
 let teamSearchSeason = null;
 let teamIndex = {};
 
-/** "Region 6-3A", the place a search result shows ("Independent, 1A" for a team with no region). */
-const resultPlace = (t) => t.region == null ? `Independent${t.class_ ? `, ${t.class_}A` : ""}` : `Region ${t.region}-${t.class_}A`;
+/** "Region 6-3A", the place a search result shows ("1A Independent" for a team with no region). */
+const resultPlace = (t) => t.region == null ? `${t.class_ ? `${t.class_}A ` : ""}Independent` : `Region ${t.region}-${t.class_}A`;
 
 /**
  * Make a search box work: *form* holds the input, the results popup (its list

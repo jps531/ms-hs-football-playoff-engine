@@ -117,3 +117,18 @@ def test_the_most_lists_every_county_tied_with_the_last_one_shown():
     assert [n for _, n in rc.most_counties(counts, room=12)] == [9, 9, 8, 8, 8, 6, 6, 6]
     # A county with none is never one of "the most".
     assert rc.most_counties({"A": 1, "B": 0}) == [("A", 1)]
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_a_countys_independent_is_a_gray_pill(theme):
+    """A county's independent (no region) gets the neutral "Ind. 1A" pill, on its map and in its list,
+    and every county image still draws."""
+    indy = {**next(r for r in S27 if r["county"] == "Tippah"), "school": "Indy", "class": 1, "region": None}
+    schools = [*S27, indy]
+    assert rp.pill_text(indy) == "Ind. 1A" and rp.place_key(indy) == "1-ind"
+    assert rc.place_shades(theme, [indy]) == {"1-ind": tuple(rp.INDEPENDENT_SHADE[theme].values())}
+    assert all(len(p) == 1 for p in [rc.render_county("Tippah", [2027], schools, theme)])
+    older = {"label": "2026", "seasons": [2026], "schools": S26}
+    newer = {"label": "2027", "seasons": [2027], "schools": schools}
+    assert len(rc.render_county_compared("Tippah", older, newer, theme)) == 1
+    assert len(rc.render_county_timeline("Tippah", [older, newer], theme)) == 1

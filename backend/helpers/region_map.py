@@ -123,7 +123,9 @@ def region_shapes(schools: list[dict], tangled: list | None = None) -> dict[int,
     """Each region's shape for one class's *schools* ({x, y, region}): the outline around its schools,
     padded by ``PAD_KM``. A shape isn't cut to the state, so a school on the coast or the state line sits
     inside its region's shape like every other school. Pairs of regions no straight line separates are
-    appended to *tangled* (and split by nearest school)."""
+    appended to *tangled* (and split by nearest school). An independent (region None) has no shape.
+    """
+    schools = [s for s in schools if s["region"] is not None]
     groups: dict[int, list[tuple[float, float]]] = {}
     for s in schools:
         groups.setdefault(s["region"], []).append((s["x"], s["y"]))

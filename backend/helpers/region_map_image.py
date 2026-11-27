@@ -40,10 +40,35 @@ REGION_COLORS = {
 }
 
 
-def region_color(theme: str, region: int) -> str:
-    """Region *region*'s color in *theme*."""
+INDEPENDENT = "independent"
+"""The color of an independent's dot (a school that played without a region): drawn as a ring of
+dashes around an "I", not a color."""
+
+
+def region_color(theme: str, region: int | None) -> str:
+    """Region *region*'s color in *theme* (``INDEPENDENT`` for no region)."""
+    if region is None:
+        return INDEPENDENT
     colors = REGION_COLORS[theme]
     return colors[(region - 1) % len(colors)]
+
+
+def region_order(school: dict) -> int:
+    """Where a school's region sorts: by number, independents (no region) last."""
+    return school["region"] if school["region"] is not None else 99
+
+
+def independents_line(seasons: list[int], school: str | None = None) -> str:
+    """What the Independent group says (``independentsLine``), or, of one *school*, what its image says."""
+    if school:
+        return (
+            f"{school} did not participate in a region in {seasons_words(seasons)}; "
+            "it was therefore ineligible for the playoffs."
+        )
+    return (
+        f"These teams did not participate in a region in {seasons_words(seasons)}; "
+        "they were therefore ineligible for the playoffs."
+    )
 
 
 def cycle_name(first: int) -> str:
@@ -61,14 +86,27 @@ def seasons_line(seasons: list[int]) -> str:
     return seasons_words(seasons) + (" seasons" if len(seasons) > 1 else " season")
 
 
+def independent_place(school: dict) -> str:
+    """ "1A Independent" for a school that played without a region ("Independent" with no class)."""
+    return f"{school['class']}A Independent" if school.get("class") else "Independent"
+
+
 def place(school: dict | None) -> str:
-    """ "Region 2-5A" for a school's row (the site's {region}-{class}A)."""
-    return f"Region {school['region']}-{school['class']}A" if school else ""
+    """ "Region 2-5A" for a school's row (the site's {region}-{class}A), or "1A Independent"."""
+    if not school:
+        return ""
+    if school["region"] is None:
+        return independent_place(school)
+    return f"Region {school['region']}-{school['class']}A"
 
 
 def short_place(school: dict | None) -> str:
-    """ "2-5A" for a school's row."""
-    return f"{school['region']}-{school['class']}A" if school else ""
+    """ "2-5A" for a school's row, or "1A Independent"."""
+    if not school:
+        return ""
+    if school["region"] is None:
+        return independent_place(school)
+    return f"{school['region']}-{school['class']}A"
 
 
 def change_line(now: dict, before: dict | None, prior_season: int) -> str:
@@ -80,6 +118,8 @@ def change_line(now: dict, before: dict | None, prior_season: int) -> str:
         if old:
             return f"New school in {prior_season + 1}, on {old}’s campus"
         return f"Not in a region in {prior_season}"
+    if (before["region"] is None) != (now["region"] is None):  # into or out of a region
+        return f"{place(before)} in {prior_season}"
     if before["class"] != now["class"]:
         way = "up" if now["class"] > before["class"] else "down"
         return f"Moved {way} from {place(before)}"
@@ -266,10 +306,34 @@ class _Page:
             self.d.ellipse(
                 (px - r - ring, py - r - ring, px + r + ring, py + r + ring), fill=t.text if i in focused else t.bg
             )
+            if color == INDEPENDENT:  # no region: a ring of dashes around an "I", in the second text color
+                self._dashed_dot(px, py, r)
+                if text:
+                    self.d.text((px, py + 1), text, font=_inter(round(r * 1.15), 700), fill=t.text_2, anchor="mm")
+                continue
             self.d.ellipse((px - r, py - r, px + r, py + r), fill=color)
             if text:
                 self.d.text((px, py + 1), text, font=_inter(round(r * 1.15), 700), fill="#FFFFFF", anchor="mm")
         self._labels(frame, spots, dots, labels, label_size)
+
+    def _dashed_dot(self, x: float, y: float, r: float) -> None:
+        """An independent's dot: the page's background inside a ring of dashes."""
+        self.d.ellipse((x - r, y - r, x + r, y + r), fill=self.t.bg)
+        width = max(1, round(r / 9))
+        dashes = 10 if r >= 16 else 6
+        for k in range(dashes):
+            start = k * 360 / dashes
+            self.d.arc((x - r, y - r, x + r, y + r), start, start + 360 / dashes * 0.6, fill=self.t.text_2, width=width)
+
+    def chip(self, x: float, y: float, size: float, region: int | None) -> None:
+        """A region's numbered chip at (*x*, *y*), its top left; an independent's dashed "I"."""
+        r = size / 2
+        if region is None:
+            self._dashed_dot(x + r, y + r, r)
+            self.d.text((x + r, y + r + 1), "I", font=_inter(round(size * 0.61), 700), fill=self.t.text_2, anchor="mm")
+            return
+        self.d.ellipse((x, y, x + size, y + size), fill=region_color(self.theme, region))
+        self.d.text((x + r, y + r + 1), str(region), font=_inter(round(size * 0.61), 700), fill="#FFFFFF", anchor="mm")
 
     def _labels(self, frame: _Frame, spots, dots, labels, size: int) -> None:
         """Each label beside its dot, at the spot around it that overlaps the other labels and dots least:
@@ -328,13 +392,20 @@ def _absent(school: str, first: int, short: bool = False) -> str:
     return f"Not in a region in {first - 1}"
 
 
+def dot_text(school: dict) -> str:
+    """The text on a school's dot: its region's number, or "I" for an independent."""
+    return "I" if school["region"] is None else str(school["region"])
+
+
 def _class_rows(schools: list[dict], clazz: int) -> list[dict]:
-    """A class's schools, by region and name."""
-    return sorted((s for s in schools if s["class"] == clazz), key=lambda s: (s["region"], s["school"].lower()))
+    """A class's schools, by region (independents last) and name."""
+    return sorted((s for s in schools if s["class"] == clazz), key=lambda s: (region_order(s), s["school"].lower()))
 
 
 def _members(schools: list[dict], at: dict, but: str) -> list[dict]:
-    """The schools in *at*'s class and region, other than *but*, by name."""
+    """The schools in *at*'s class and region, other than *but*, by name (none for an independent)."""
+    if at["region"] is None:
+        return []
     return sorted(
         (s for s in schools if (s["class"], s["region"]) == (at["class"], at["region"]) and s["school"] != but),
         key=lambda s: s["school"].lower(),
@@ -347,10 +418,12 @@ def _region_map(page: _Page, frame: _Frame, rows: list[dict], school: str, label
     me = next(s for s in rows if s["school"] == school)
     rows = [s for s in rows if s["x"] is not None]  # a school with no place on the map gets no dot
     color = region_color(page.theme, me["region"])
-    group = sorted((s for s in rows if s["region"] == me["region"]), key=lambda s: s["school"].lower())
-    others = [s for s in rows if s["region"] != me["region"]]
+    mine = (lambda s: s["school"] == school) if me["region"] is None else (lambda s: s["region"] == me["region"])
+    group = sorted((s for s in rows if mine(s)), key=lambda s: s["school"].lower())
+    others = [s for s in rows if not mine(s)]
     muted = _blend(page.t.bg, page.t.text, 0.3)
-    dots = [(s["x"], s["y"], muted, "", small) for s in others] + [(s["x"], s["y"], color, "", big) for s in group]
+    dots = [(s["x"], s["y"], muted, "", small) for s in others]
+    dots += [(s["x"], s["y"], color, "I" if color == INDEPENDENT else "", big) for s in group]
     first = len(others)
     shapes = region_map.region_shapes(rows)
     names = [s["school"] for s in group]
@@ -374,22 +447,27 @@ def render_class_regions(clazz: int, seasons: list[int], schools: list[dict], th
     d, t = page.d, page.t
     d.text((PAD, PAD + 104), f"Class {clazz}A Football Regions", font=_nippo(124), fill=t.text, anchor="ls")
     d.text((PAD, PAD + 176), seasons_line(seasons), font=_inter(42, 500), fill=t.text_2, anchor="ls")
-    regions = sorted({s["region"] for s in rows})
+    regions = sorted({s["region"] for s in rows}, key=lambda g: region_order({"region": g}))
     top, bottom = PAD + 250, SIZE[1] - PAD - 110
     on_map = [s for s in rows if s["x"] is not None]  # a school with no place on the map is only listed
     shapes = region_map.region_shapes(on_map)
     page.map(
         _Frame((PAD - 20, top, MAP_RIGHT, bottom)),
         [(shapes[g], region_color(theme, g)) for g in sorted(shapes)],
-        [(s["x"], s["y"], region_color(theme, s["region"]), str(s["region"]), 26) for s in on_map],
+        [(s["x"], s["y"], region_color(theme, s["region"]), dot_text(s), 26) for s in on_map],
     )
     d = page.d
     y, width = top + 10, SIZE[0] - PAD - LIST_X - 80
     compact = len(regions) > 4  # eight regions: names run on, "Ashland · Biggersville · …"
     for g in regions:
-        d.ellipse((LIST_X, y, LIST_X + 56, y + 56), fill=region_color(theme, g))
-        d.text((LIST_X + 28, y + 29), str(g), font=_inter(34, 700), fill="#FFFFFF", anchor="mm")
-        d.text((LIST_X + 80, y + 48), f"Region {g}", font=_nippo(52), fill=t.text, anchor="ls")
+        page.chip(LIST_X, y, 56, g)
+        d.text(
+            (LIST_X + 80, y + 48),
+            "Independent" if g is None else f"Region {g}",
+            font=_nippo(52),
+            fill=t.text,
+            anchor="ls",
+        )
         y += 96
         names = [s["school"] for s in rows if s["region"] == g]
         if compact:
@@ -472,6 +550,9 @@ def render_team_region(
             y += 130 if notes else 96
         return y + 30
 
+    if me["region"] is None:  # no region: no members; why there's none
+        page.label(LIST_X, y, "Independent")
+        y = _card_lines(page, LIST_X, y + 70, independents_line(seasons, school), 36, SIZE[0] - PAD - LIST_X, 4) + 30
     if new:
         y = block("New Region Members" if prior else "Region Members", new, y, bool(prior))
     if kept:
@@ -626,7 +707,7 @@ def render_class_regions_compared(
 
     for x0, rows_, when in ((PAD, then, str(first - 1)), (PAD + w + gap, now, seasons_words(seasons))):
         d.text((x0, top + 50), when, font=_nippo(60), fill=t.text, anchor="ls")
-        count = len({s["region"] for s in rows_})
+        count = len({s["region"] for s in rows_ if s["region"] is not None})
         d.text(
             (x0, top + 100),
             f"{len(rows_)} schools in {count} regions",
@@ -639,7 +720,7 @@ def render_class_regions_compared(
         page.map(
             _Frame((x0, top + 140, x0 + w, bottom)),
             [(shapes[g], region_color(theme, g)) for g in sorted(shapes)],
-            [(s["x"], s["y"], region_color(theme, s["region"]), str(s["region"]), 17) for s in on_map],
+            [(s["x"], s["y"], region_color(theme, s["region"]), dot_text(s), 17) for s in on_map],
         )
     d = page.d
     name_font, note_font = _inter(34, 600), _inter(30, 500)
@@ -672,11 +753,16 @@ def render_class_regions_compared(
         PAD + 2 * (narrow + col_gap),
         wide,
         "Changed region",
-        [(n, f"{then_by[n]['region']} to {now_by[n]['region']}") for n in changed],
+        [(n, f"{_region_word(then_by[n])} to {_region_word(now_by[n])}") for n in changed],
         per_col=2,
     )
     page.footer()
     return [page.img]
+
+
+def _region_word(school: dict) -> str:
+    """A school's region in a "Changed region" note: its number, or "Ind." (independent)."""
+    return "Ind." if school["region"] is None else str(school["region"])
 
 
 # ----------------------------------------------------------------- link previews
@@ -724,16 +810,15 @@ def render_class_regions_card(clazz: int, seasons: list[int], schools: list[dict
     d.text((CARD_PAD, CARD_PAD + 120), f"Class {clazz}A", font=_nippo(152), fill=t.text, anchor="ls")
     d.text((CARD_PAD, CARD_PAD + 270), "Football Regions", font=_nippo(152), fill=t.text, anchor="ls")
     d.text((CARD_PAD, CARD_PAD + 380), seasons_line(seasons), font=_inter(60, 600), fill=t.text_2, anchor="ls")
-    regions = sorted({s["region"] for s in rows})
+    regions = sorted({s["region"] for s in rows}, key=lambda g: region_order({"region": g}))
     x, y = CARD_PAD, CARD_PAD + 500
     for g in regions:
-        d.ellipse((x, y, x + 72, y + 72), fill=region_color("dark", g))
-        d.text((x + 36, y + 37), str(g), font=_inter(44, 700), fill="#FFFFFF", anchor="mm")
+        page.chip(x, y, 72, g)
         x += 96
     shapes = region_map.region_shapes(rows)
     page.map(
         _card_map(page),
-        [(shapes[g], region_color("dark", g)) for g in regions],
+        [(shapes[g], region_color("dark", g)) for g in sorted(shapes)],
         [(s["x"], s["y"], region_color("dark", s["region"]), "", 14) for s in rows],
     )
     brand_lockup(page.img, "dark", CARD_PAD, CARD[1] - CARD_PAD + 16, 44, align="left")

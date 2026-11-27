@@ -353,3 +353,58 @@ test("seasons in a row that look the same are one map on the Timeline, labeled f
   assert.equal(simpson.length, 1);
   assert.equal(regions.spanLabel([2026]), "2026");
 });
+
+// ------------------------------------------------------------- independents
+
+const INDEPENDENTS = {
+  season: 2017, seasons: [2017, 2018], prior_season: 2016, standings_season: null,
+  regions: { 1: { 1: { d: "M0,0Z", box: [0, 0, 1, 1] } } },
+  schools: [
+    { school: "Ashland", slug: "ashland", class: 1, region: 1, x: 1, y: 1, before: { class: 1, region: 1 } },
+    { school: "Hickory Flat", slug: "hickory-flat", class: 1, region: null, x: 2, y: 2, before: { class: 1, region: 2 } },
+    { school: "Coldwater", slug: "coldwater", class: 1, region: null, x: 3, y: 3, before: null },
+    { school: "Myrtle", slug: "myrtle", class: 1, region: 1, x: 4, y: 4, before: { class: 1, region: null } },
+  ],
+};
+
+test("an independent's place reads '1A Independent', and its notes say where it was", () => {
+  const [, hickory, coldwater, myrtle] = INDEPENDENTS.schools;
+  assert.equal(regions.place(hickory), "1A Independent");
+  assert.equal(regions.shortPlace({ class: null, region: null }), "Independent");
+  assert.equal(regions.teamNote(hickory, 2016), "2-1A in 2016");
+  assert.equal(regions.teamNote(myrtle, 2016), "1A Independent in 2016");
+  assert.equal(regions.teamNote(coldwater, 2016), "Not in a region in 2016");
+  assert.equal(regions.teamChange(myrtle, 2016), "1A Independent in 2016");
+  assert.equal(regions.teamChange(hickory, 2016), "Region 2-1A in 2016");
+});
+
+test("the lists end with the Independent group, which opens why it has no standings", () => {
+  const html = regionsLists(1, INDEPENDENTS, 2026);
+  assert.ok(html.indexOf("Region 1") < html.indexOf("Independent</h2>"));
+  assert.match(html, /<details class="regions-list__about"><summary class="regions-list__head">/);
+  assert.match(html, /did not participate in a region in 2017 and 2018; they were therefore ineligible for the playoffs\./);
+  assert.match(html, /Hickory Flat<\/span><span class="regions-list__was">2-1A in 2016/);
+  assert.doesNotMatch(html, /Region null/);
+});
+
+test("an independent's dot is a dashed 'I' of its own: picking it lights no region", () => {
+  const layer = regions.classLayer(INDEPENDENTS, 1);
+  const hickory = INDEPENDENTS.schools[1];
+  assert.equal(layer.mark(hickory), "I");
+  assert.equal(layer.color(hickory), "ind");
+  assert.equal(layer.group(hickory), "ind-hickory-flat");
+  assert.notEqual(layer.group(hickory), layer.group(INDEPENDENTS.schools[2]));
+  assert.match(regions.mapSvg({ width: 10, height: 10, state: "M0,0Z", counties: [] }, INDEPENDENTS, 1, layer), /map-dot map-dot--ind/);
+  const picked = pickedHtml(hickory, INDEPENDENTS);
+  assert.match(picked, /region-chip--ind/);
+  assert.doesNotMatch(picked, /Other schools/);
+});
+
+test("a county's independent is a gray 'Ind. 1A' pill, and brings no region-mates", () => {
+  const payload = { ...INDEPENDENTS, schools: INDEPENDENTS.schools.map((s) => ({ ...s, county: s.slug === "hickory-flat" ? "Benton" : "Tate" })) };
+  const layer = regions.countyLayer(payload, "Benton");
+  assert.deepEqual(layer.schools.map((s) => s.school), ["Hickory Flat"]);
+  assert.equal(layer.mark(payload.schools[1]), "Ind. 1A");
+  assert.equal(regions.placeKey(payload.schools[1]), "1-ind");
+  assert.equal(regions.countyShades([payload.schools[1]]).get("1-ind").light.fill, "#E4E6E9");
+});

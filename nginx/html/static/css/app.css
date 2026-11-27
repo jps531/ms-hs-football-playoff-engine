@@ -2137,6 +2137,23 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .map-region--6 { fill: var(--region-6); stroke: var(--region-6); } .regions-list__region--6 { --region: var(--region-6); } .map-dot--6 circle, .region-chip--6 { fill: var(--region-6); background: var(--region-6); }
 .map-region--7 { fill: var(--region-7); stroke: var(--region-7); } .regions-list__region--7 { --region: var(--region-7); } .map-dot--7 circle, .region-chip--7 { fill: var(--region-7); background: var(--region-7); }
 .map-region--8 { fill: var(--region-8); stroke: var(--region-8); } .regions-list__region--8 { --region: var(--region-8); } .map-dot--8 circle, .region-chip--8 { fill: var(--region-8); background: var(--region-8); }
+/* An independent (played without a region): a dashed ring around an "I", no shape. */
+.regions-list__region--ind { --region: var(--text-secondary); }
+.map-dot--ind circle:first-child { fill: var(--surface-page); stroke: var(--text-secondary); stroke-width: 2; stroke-dasharray: 4 3; }
+.map-dot--ind text { fill: var(--text-secondary); }
+.map-dot--ind.is-picked circle:first-child { stroke: var(--text-primary); stroke-width: 3; stroke-dasharray: 5 3; }
+.region-chip--ind { background: var(--surface-page); color: var(--text-secondary); border: 1.5px dashed var(--text-secondary); }
+/* The Independent group's heading opens why it has no standings: the "i" says it can. */
+.regions-list__about summary { list-style: none; cursor: pointer; }
+.regions-list__about summary::-webkit-details-marker { display: none; }
+.regions-list__info {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; flex: none;
+  border: 1.5px solid var(--text-secondary); border-radius: 50%;
+  color: var(--text-secondary); font-size: 13px; font-weight: 700; font-style: italic; font-family: Georgia, serif; line-height: 1;
+}
+.regions-list__about summary:hover .regions-list__info, .regions-list__about[open] .regions-list__info { color: var(--text-primary); border-color: var(--text-primary); }
+.regions-list__about summary:focus-visible { outline: 2px solid var(--accent-identity); outline-offset: 2px; border-radius: 8px; }
+.regions-list__about p { margin: 0 0 8px; color: var(--text-secondary); font-size: 14px; line-height: 20px; }
 
 /* ------------------------------------------------------------- counties (regions.js countyPage, countiesPage) */
 .county-note { margin: 4px 0 0; font-size: 13px; line-height: 18px; }

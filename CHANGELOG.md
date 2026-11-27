@@ -5,6 +5,22 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.45.0
+
+Independents on the maps: a school that played a season without a region.
+
+- **On a class's map:** a dashed "I" dot, with no region shape. Picking one shows where it was the
+  season before; it has no region-mates to show.
+- **In the lists:** an Independent group after the last region. Its heading opens a note: "These
+  teams did not participate in a region in 2017 and 2018; they were therefore ineligible for the
+  playoffs." Each school's line says where it was the season before, as the regions' do, and a
+  school that was an independent then reads, for example, "1A Independent in 2023".
+- **Compare, Timeline and the Counties pages** name an independent the same way ("Region 2-1A →
+  1A Independent"); on a county's map it's a gray "Ind. 1A" pill.
+- **The images to share** draw it the same way, and a team's own image says why it has no region.
+
+No season on the site has an independent yet; the seasons before 2025 will.
+
 ## 1.44.0
 
 Region files can now describe the seasons before 2023, ready for loading 2015-2024:

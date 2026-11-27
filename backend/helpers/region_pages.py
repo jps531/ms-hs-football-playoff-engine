@@ -22,7 +22,15 @@ import re
 from backend.helpers import region_map
 from backend.helpers.data_helpers import SCHOOL_SUCCESSORS, names_in, school_name_for_season
 from backend.helpers.region_files import cycle_start
-from backend.helpers.region_map_image import REGION_COLORS, cycle_name, place, seasons_line, short_place
+from backend.helpers.region_map_image import (
+    REGION_COLORS,
+    cycle_name,
+    independents_line,
+    place,
+    region_order,
+    seasons_line,
+    short_place,
+)
 from backend.helpers.share_cards import slugify
 from backend.helpers.static_pages import _e, _mark, breadcrumb_nav, class_trail, region_path
 
@@ -56,10 +64,11 @@ def school_rows(teams: list[dict]) -> list[dict]:
     """A season's schools ({school, class, region, city, x, y, county}) from ``/teams``: projected onto
     the state grid, x and y in meters. A school without coordinates, or whose coordinates fall outside
     Mississippi, keeps its place in the lists with x and y None (it gets no dot; a dot in the wrong
-    place would be worse than none)."""
+    place would be worse than none). An independent (region None) is in its class's rows; one with no
+    class either isn't on any class's map."""
     rows = []
     for t in teams:
-        if t.get("class_") is None or t.get("region") is None:
+        if t.get("class_") is None:
             continue
         x = y = county = None
         if t.get("latitude") is not None and t.get("longitude") is not None:
@@ -78,7 +87,7 @@ def school_rows(teams: list[dict]) -> list[dict]:
                 "y": y,
             }
         )
-    return sorted(rows, key=lambda r: (r["class"], r["region"], r["school"].lower()))
+    return sorted(rows, key=lambda r: (r["class"], region_order(r), r["school"].lower()))
 
 
 def mapped(rows: list[dict]) -> list[dict]:
@@ -171,8 +180,8 @@ def season_payload(option: dict, rows: list[dict], prior: list[dict] | None, pla
 
 
 def team_note(school: dict, prior_season: int | None) -> str:
-    """Where a school was the season before, for its line in the list: "4-4A in 2026", "New school";
-    nothing when it was in the same region then."""
+    """Where a school was the season before, for its line in the list: "4-4A in 2026", "1A Independent in
+    2026", "New school"; nothing when it was in the same place then."""
     if prior_season is None:
         return ""
     was = school.get("before")
@@ -209,7 +218,7 @@ def regions_lists(clazz: int, payload: dict, current_season: int | None, teams: 
     when it has some."""
     schools = [s for s in payload["schools"] if s["class"] == clazz]
     out = []
-    for g in sorted({s["region"] for s in schools}):
+    for g in sorted({s["region"] for s in schools if s["region"] is not None}):
         href = standings_href(clazz, g, payload.get("standings_season"), current_season)
         standings = (
             f'<a class="regions-list__standings" href="{_e(href)}"><span class="visually-hidden">Region {g} </span>'
@@ -233,7 +242,35 @@ def regions_lists(clazz: int, payload: dict, current_season: int | None, teams: 
             f'<h2 class="regions-list__name"><span class="region-chip region-chip--{g}" aria-hidden="true">{g}</span>'
             f"Region {g}</h2>{standings}</div><ul>{''.join(items)}</ul></section>"
         )
+    independents = [s for s in schools if s["region"] is None]
+    if independents:
+        out.append(independents_section(clazz, payload, independents, teams))
     return "".join(out)
+
+
+def independents_section(clazz: int, payload: dict, schools: list[dict], teams: dict | None = None) -> str:
+    """The Independent group, after the regions (``independentsSection``): its heading, with its dashed
+    chip and an "i", opens why it has no standings; then its schools, each with where it was the season
+    before."""
+    items = []
+    for s in sorted(schools, key=lambda s: s["school"].lower()):
+        note = team_note(s, payload.get("prior_season"))
+        items.append(
+            f'<li><a class="regions-list__row" href="{_e(regions_path(clazz))}?team={_e(s["slug"])}" '
+            f'data-team="{_e(s["slug"])}">'
+            f"{_mark(s['school'], (teams or {}).get(s['school']))}"
+            f'<span class="regions-list__team">{_e(s["school"])}</span>'
+            + (f'<span class="regions-list__was">{_e(note)}</span>' if note else "")
+            + "</a></li>"
+        )
+    return (
+        '<section class="regions-list__region regions-list__region--ind"><details class="regions-list__about">'
+        '<summary class="regions-list__head"><h2 class="regions-list__name">'
+        '<span class="region-chip region-chip--ind" aria-hidden="true">I</span>Independent</h2>'
+        '<span class="regions-list__info" title="Why no standings">i<span class="visually-hidden">: why no standings</span>'
+        f"</span></summary><p>{_e(independents_line(payload['seasons']))}</p></details>"
+        f"<ul>{''.join(items)}</ul></section>"
+    )
 
 
 def regions_body(
@@ -257,7 +294,7 @@ def regions_body(
 
 def regions_description(clazz: int, payload: dict) -> str:
     """The page's description for search results and link previews."""
-    n = len({s["region"] for s in payload["schools"] if s["class"] == clazz})
+    n = len({s["region"] for s in payload["schools"] if s["class"] == clazz and s["region"] is not None})
     count = sum(1 for s in payload["schools"] if s["class"] == clazz)
     return (
         f"Mississippi high school football's Class {clazz}A regions for the "
@@ -301,12 +338,26 @@ def counties_trail(county: str | None = None) -> Trail:
 PLACE_FALLBACK = (1, 3, 7, 4, 5, 6, 2, 8)
 
 
+def place_key(school: dict) -> str:
+    """A school's place as a key: "6-3" (class 6A, region 3), or "1-ind" for a 1A independent (``placeKey``)."""
+    return f"{school['class']}-{'ind' if school['region'] is None else school['region']}"
+
+
+def pill_text(school: dict) -> str:
+    """A school's place on its pill: "3-6A", or "Ind. 1A" for an independent (``pillText``)."""
+    return f"Ind. {school['class']}A" if school["region"] is None else f"{school['region']}-{school['class']}A"
+
+
+# An independent's pill: neutral gray, in each theme ({fill, ink}), whatever the regions' colors.
+INDEPENDENT_SHADE = {"light": {"fill": "#E4E6E9", "ink": "#1B1B1B"}, "dark": {"fill": "#4A4E55", "ink": "#FFFFFF"}}
+
+
 def county_places(schools: list[dict]) -> list[dict]:
     """The places (a region in a class) a county's *schools* are in, highest class first, each with a color
     (1-8): its region's own, unless another of the county's places has it already, then the first one not
-    in use (``countyPlaces``)."""
+    in use (``countyPlaces``). Independents (no region) have no place here."""
     seen: dict[str, dict] = {}
-    for s in sorted(schools, key=lambda s: (-s["class"], s["region"])):
+    for s in sorted((s for s in schools if s["region"] is not None), key=lambda s: (-s["class"], s["region"])):
         key = f"{s['class']}-{s['region']}"
         seen.setdefault(key, {"key": key, "clazz": s["class"], "region": s["region"]})
     used: set[int] = set()
@@ -389,6 +440,16 @@ def county_shades(schools: list[dict]) -> dict[str, dict]:
                 "fill": f"light-dark({light['fill']}, {dark['fill']})",
                 "ink": f"light-dark({light['ink']}, {dark['ink']})",
             }
+    for s in schools:  # independents: one neutral shade
+        if s["region"] is None:
+            light, dark = INDEPENDENT_SHADE["light"], INDEPENDENT_SHADE["dark"]
+            out[place_key(s)] = {
+                "tone": None,
+                "light": light,
+                "dark": dark,
+                "fill": f"light-dark({light['fill']}, {dark['fill']})",
+                "ink": f"light-dark({light['ink']}, {dark['ink']})",
+            }
     return out
 
 
@@ -399,10 +460,10 @@ def paint(prop: str, shade: dict, key: str) -> str:
 
 
 def county_pill(school: dict, shade: dict) -> str:
-    """A school's place as a pill in its shade, "3-6A" (``countyPill``)."""
+    """A school's place as a pill in its shade, "3-6A" or "Ind. 1A" (``countyPill``)."""
     return (
         f'<span class="county-pill" style="{paint("background", shade, "fill")};{paint("color", shade, "ink")}" aria-hidden="true">'
-        f"{school['region']}-{school['class']}A</span>"
+        f"{_e(pill_text(school))}</span>"
     )
 
 
@@ -424,9 +485,9 @@ def county_lists(county: str, payload: dict, teams: dict | None = None) -> str:
     out = []
     for c in sorted({s["class"] for s in mine}, reverse=True):
         rows = []
-        for s in sorted((s for s in mine if s["class"] == c), key=lambda s: (s["region"], s["school"].lower())):
+        for s in sorted((s for s in mine if s["class"] == c), key=lambda s: (region_order(s), s["school"].lower())):
             town = _e(s["city"]) if s.get("city") else ""
-            pill = county_pill(s, shades[f"{c}-{s['region']}"])
+            pill = county_pill(s, shades[place_key(s)])
             rows.append(
                 f'<li><a class="regions-list__row" href="{_e(counties_path(county))}?team={_e(s["slug"])}" '
                 f'data-team="{_e(s["slug"])}">'

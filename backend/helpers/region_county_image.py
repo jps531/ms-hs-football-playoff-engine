@@ -37,6 +37,7 @@ from backend.helpers.region_map_image import (
     _Page,
     _polygons,
     place,
+    region_order,
     seasons_line,
 )
 from backend.helpers.region_pages import (
@@ -45,6 +46,8 @@ from backend.helpers.region_pages import (
     county_count,
     county_shades,
     county_title,
+    pill_text,
+    place_key,
     schools_count,
 )
 from backend.helpers.region_timeline_image import WIDTH, _cells, _sizes, cycle_label, grid, span_line
@@ -152,9 +155,6 @@ def county_map(
     mine = [s for s in schools if s.get("county") == county]
     shades = place_shades(theme, mine)
 
-    def key(s: dict) -> str:
-        return f"{s['class']}-{s['region']}"
-
     fills = []
     for c in sorted({s["class"] for s in mine}, reverse=True):
         shapes = region_map.region_shapes([s for s in schools if s["class"] == c and s["x"] is not None])
@@ -179,7 +179,7 @@ def county_map(
     pills = []
     for s in own:
         x, y = frame(s["x"], s["y"])
-        text = f"{s['region']}-{s['class']}A"
+        text = pill_text(s)
         pills.append({"s": s, "text": text, "x": x, "y": y, "w": d.textlength(text, font=font) + h * 0.8, "at": [x, y]})
     _spread_pills(pills, h, max(3, pill_size * 0.2))
     for q in pills:  # the lines back to the spots, under every pill
@@ -188,7 +188,7 @@ def county_map(
             m = max(3, pill_size * 0.16)
             d.ellipse((q["x"] - m, q["y"] - m, q["x"] + m, q["y"] + m), fill=t.text)
     for q in pills:
-        fill, ink = shades[key(q["s"])]
+        fill, ink = shades[place_key(q["s"])]
         cx, cy = q["at"]
         d.rounded_rectangle(
             (cx - q["w"] / 2, cy - h / 2, cx + q["w"] / 2, cy + h / 2), radius=h / 2, fill=fill, outline=t.bg, width=3
@@ -265,10 +265,10 @@ def render_county(county: str, seasons: list[int], schools: list[dict], theme: s
         y += before if i else 0
         page.label(LIST_X, y + 34, f"Class {c}A")
         y += head
-        for s in sorted((s for s in mine if s["class"] == c), key=lambda s: (s["region"], s["school"].lower())):
+        for s in sorted((s for s in mine if s["class"] == c), key=lambda s: (region_order(s), s["school"].lower())):
             name = fit(d, s["school"], _inter(40, 600), width)
             d.text((LIST_X, y + row * 0.32 + 14), name, font=_inter(40, 600), fill=t.text, anchor="ls")
-            right = _pill(page, LIST_X, y + row * 0.32 + 44, f"{s['region']}-{c}A", shades[f"{c}-{s['region']}"], 26)
+            right = _pill(page, LIST_X, y + row * 0.32 + 44, pill_text(s), shades[place_key(s)], 26)
             if s.get("city"):
                 town = fit(d, s["city"], _inter(32, 500), width - (right - LIST_X) - 16)
                 d.text((right + 16, y + row * 0.32 + 56), town, font=_inter(32, 500), fill=t.text_2, anchor="ls")

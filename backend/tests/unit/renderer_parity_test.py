@@ -242,6 +242,10 @@ REGIONS = {
         {"school": "Leake", "slug": "leake", "class": 5, "region": 2, "before": {"class": 5, "region": 2}, "successor_of": None},
         {"school": "St. Andrew’s", "slug": "st-andrews", "class": 5, "region": 1, "before": None, "successor_of": None},
         {"school": "North Tippah", "slug": "north-tippah", "class": 3, "region": 2, "before": None, "successor_of": "Walnut"},
+        # Independents (no region): one that left a region, one in a region that was an independent.
+        {"school": "Hickory Flat", "slug": "hickory-flat", "class": 5, "region": None, "before": {"class": 5, "region": 2}, "successor_of": None},
+        {"school": "Myrtle", "slug": "myrtle", "class": 5, "region": 1, "before": {"class": 5, "region": None}, "successor_of": None},
+        {"school": "Coldwater", "slug": "coldwater", "class": 5, "region": None, "before": {"class": 5, "region": None}, "successor_of": None},
     ],
 }  # fmt: skip
 REGIONS_PLAYED = {**REGIONS, "season": 2025, "seasons": [2025], "standings_season": 2025, "prior_season": None}
@@ -261,6 +265,7 @@ COUNTY = {
         {"school": "St. Andrew’s", "slug": "st-andrews", "class": 2, "region": 3, "county": "Hinds", "city": ""},
         {"school": "Raymond", "slug": "raymond", "class": 4, "region": 6, "county": "Hinds", "city": "Raymond"},
         {"school": "Pearl", "slug": "pearl", "class": 6, "region": 3, "county": "Rankin", "city": "Pearl"},
+        {"school": "Byram", "slug": "byram", "class": 6, "region": None, "county": "Hinds", "city": "Byram"},
     ],
 }  # fmt: skip
 COUNTY_TEAMS = {"Terry": {"helmet_url": "https://res.cloudinary.com/x/terry.png"}}
@@ -389,9 +394,11 @@ CASES = [
     *[(f"countyLists {c}", rp.county_lists(c, COUNTY, COUNTY_TEAMS), _call("regions", "countyLists", c, COUNTY, COUNTY_TEAMS), "html")
       for c in ("Hinds", "Rankin", "Issaquena")],
     *[(f"countyShades {n}", dict(rp.county_shades(COUNTY["schools"][:n])), _call("regions", "countyShadesObject", COUNTY["schools"][:n]), "data")
-      for n in (1, 2, 4, 5)],
+      for n in (1, 2, 4, 5, 6)],
     ("countyPlaces", [{**p, "clazz": p["clazz"]} for p in rp.county_places(COUNTY["schools"][:4])],
      _call("regions", "countyPlaces", COUNTY["schools"][:4]), "data"),
+    ("countyPlaces with an independent", rp.county_places(COUNTY["schools"]), _call("regions", "countyPlaces", COUNTY["schools"]), "data"),
+    *[(f"independentsLine {s}", rp.independents_line(s), _call("regions", "independentsLine", s), "data") for s in ([2017, 2018], [2022])],
     *[(f"countiesPath {c}", rp.counties_path(c), _call("regions", "countiesPath", c), "data") for c in ("Jefferson Davis", "DeSoto", None)],
     *[(f"countyCount {n}", rp.county_count(COUNTY["schools"][:n]), _call("regions", "countyCount", COUNTY["schools"][:n]), "data") for n in (0, 1, 2, 4)],
 ]  # fmt: skip

@@ -21,7 +21,7 @@ import math
 from PIL import Image
 
 from backend.helpers import region_map
-from backend.helpers.region_map_image import PAD, _Frame, _Page, place, region_color
+from backend.helpers.region_map_image import INDEPENDENT, PAD, _Frame, _Page, dot_text, place, region_color
 from backend.helpers.region_pages import PLACE_FALLBACK
 from backend.helpers.share_cards import _inter, _nippo, fit, smooth_draw
 
@@ -110,7 +110,7 @@ def render_class_timeline(clazz: int, cycles: list[dict], theme: str) -> list[Im
 
     def counts(cycle: dict) -> tuple[str, str]:
         rows = [s for s in cycle["schools"] if s["class"] == clazz]
-        return f"{len(rows)} schools", f"{len({s['region'] for s in rows})} regions"
+        return f"{len(rows)} schools", f"{len({s['region'] for s in rows if s['region'] is not None})} regions"
 
     probe = Image.new("RGB", (1, 1))
     probe_cell = grid(len(cycles), 120)[1]
@@ -132,10 +132,7 @@ def render_class_timeline(clazz: int, cycles: list[dict], theme: str) -> list[Im
         page.map(
             _Frame((x, y, x + width, y + map_h)),
             [(shapes[g], region_color(theme, g)) for g in sorted(shapes)],
-            [
-                (s["x"], s["y"], region_color(theme, s["region"]), str(s["region"]) if r >= 14 else "", r)
-                for s in on_map
-            ],
+            [(s["x"], s["y"], region_color(theme, s["region"]), dot_text(s) if r >= 14 else "", r) for s in on_map],
             line=3 if width >= 500 else 2,
         )
         d = page.d
@@ -178,7 +175,12 @@ def render_team_timeline(school: str, cycles: list[dict], teams: dict, theme: st
             group = [
                 s
                 for s in cycle["schools"]
-                if (s["class"], s["region"]) == (me["class"], me["region"]) and s["x"] is not None
+                if s["x"] is not None
+                and (
+                    s["school"] == me["school"]
+                    if me["region"] is None
+                    else (s["class"], s["region"]) == (me["class"], me["region"])
+                )
             ]
             color = colors[me["class"], me["region"]]
             shape = region_map.region_shapes(group).get(me["region"])
@@ -209,7 +211,10 @@ def render_team_timeline(school: str, cycles: list[dict], teams: dict, theme: st
                 y_line += line_h
             chip = round(small * 0.8)
             mid = y_line - small * 0.36
-            d.ellipse((x, mid - chip / 2, x + chip, mid + chip / 2), fill=colors[me["class"], me["region"]])
+            if me["region"] is None:  # an independent's chip: its dashed ring
+                page._dashed_dot(x + chip / 2, mid, chip / 2)
+            else:
+                d.ellipse((x, mid - chip / 2, x + chip, mid + chip / 2), fill=colors[me["class"], me["region"]])
             d.text(
                 (x + chip + 10, y_line),
                 fit(d, place(me), _inter(small, 500), width - chip - 10),
@@ -228,10 +233,13 @@ def _place_colors(theme: str, rows: list[dict]) -> dict[tuple[int, int], str]:
     """Each of a season's places (class, region) its region's color, but two different places (schools
     merged later, in regions with the same number in different classes) never the same: the second
     takes the first of the Counties pages' fallback colors not in use (region_pages.PLACE_FALLBACK)."""
-    out: dict[tuple[int, int], str] = {}
+    out: dict[tuple[int, int | None], str] = {}
     for r in rows:
         key = (r["class"], r["region"])
         if key in out:
+            continue
+        if r["region"] is None:  # an independent's dot is a dashed ring, whatever the others' colors
+            out[key] = INDEPENDENT
             continue
         color = region_color(theme, r["region"])
         if color in out.values():

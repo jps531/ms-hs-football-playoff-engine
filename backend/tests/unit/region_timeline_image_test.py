@@ -97,3 +97,16 @@ def test_two_places_never_share_a_color():
     colors = rt._place_colors("light", rows)
     assert colors[4, 5] == rmi.region_color("light", 5)
     assert colors[1, 5] != colors[4, 5] and len(colors) == 2
+
+
+def test_a_timeline_with_an_independent_season():
+    """A team that was an independent one season: its map has just its own dashed dot, its line says
+    "1A Independent"; the class's timeline counts only the regions."""
+    x, y = rm.project(34.61371, -89.19164)
+    a, b = rm.project(34.8329, -89.1745)
+    hickory = {"school": "Hickory Flat", "class": 1, "region": None, "x": x, "y": y}
+    ashland = {"school": "Ashland", "class": 1, "region": 1, "x": a, "y": b}
+    cycles = [{"seasons": [2017], "rows": [hickory], "schools": [hickory]}]
+    assert len(rt.render_team_timeline("Hickory Flat", cycles, {}, "light")) == 1
+    assert rt._place_colors("light", [hickory]) == {(1, None): rmi.INDEPENDENT}
+    assert len(rt.render_class_timeline(1, [{"seasons": [2017], "schools": [ashland, hickory]}], "dark")) == 1
