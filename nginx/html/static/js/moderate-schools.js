@@ -76,6 +76,9 @@ export function invalid(kind, value) {
   if (kind === "hex") return v === "" || HEX.test(v) ? "" : "A color like #00843D";
   if (kind === "hexes") return v === "" || v.split(",").every((h) => HEX.test(h.trim())) ? "" : "Colors like #FFD700, #000000";
   if (kind === "number") return v === "" || Number.isFinite(Number(v)) ? "" : "A number";
+  if (kind === "region") return /^[1-8]$/.test(v) ? "" : "A region, 1 to 8";
+  if (kind === "count") return v === "" || /^\d{1,3}$/.test(v) ? "" : "A whole number";
+  if (kind === "required") return v ? "" : "Required";
   return "";
 }
 
@@ -104,10 +107,10 @@ const sourceTag = (overridden, from) => (overridden
   : `<span class="ms-src">· ${esc(from)}</span>`);
 
 /** A labeled input for a form. */
-function input(field, label, kind, value, note = "") {
+export function input(field, label, kind, value, note = "") {
   const type = kind === "number" ? "text" : "text";
   const placeholder = kind === "season" ? (field === "first_season" ? "As far back as known" : "Still in use") : "";
-  return `<label class="ms-field"><span>${esc(label)}</span>`
+  return `<label class="fb-field"><span>${esc(label)}</span>`
     + `<input name="${esc(field)}" type="${type}" value="${esc(value ?? "")}" data-kind="${kind}"${placeholder ? ` placeholder="${esc(placeholder)}"` : ""} autocomplete="off">`
     + (note ? `<small>${note}</small>` : "") + "</label>";
 }
@@ -120,14 +123,14 @@ export function nowSection(school, editing) {
       const v = withOverride(base, overrides, f);
       return input(f, label, kind, v.value, v.overridden ? `Stored: ${esc(base[f] ?? "none")}` : "");
     }).join("");
-    return `<section class="ms-sec"><h3>Its look now</h3><form class="ms-form" data-form="now">${fields}`
-      + `<div class="ms-save"><button class="ms-primary" type="submit">Save</button><button type="button" data-cancel>Cancel</button></div>`
+    return `<section class="ms-sec"><h3>Its look now</h3><form class="fb-form ms-form" data-form="now">${fields}`
+      + `<div class="ms-save"><button class="fb-submit" type="submit">Save</button><button type="button" class="mod-button" data-cancel>Cancel</button></div>`
       + `<p class="ms-src ms-wide">A value other than the stored one is kept as an override, which wins until you change it back.</p></form></section>`;
   }
   const row = (label, html, overridden) => `<div class="ms-row"><span class="ms-k">${esc(label)}</span><span>${html} ${sourceTag(overridden, "school data")}</span></div>`;
   const v = (f) => withOverride(base, overrides, f);
   const coords = v("latitude").value != null && v("longitude").value != null ? `${v("latitude").value}, ${v("longitude").value}` : "None";
-  return `<section class="ms-sec"><h3>Its look now <button type="button" data-edit="now">Edit</button></h3>`
+  return `<section class="ms-sec"><h3>Its look now <button type="button" class="mod-button" data-edit="now">Edit</button></h3>`
     + row("Name shown", esc(v("display_name").value || school.school), v("display_name").overridden)
     + row("Mascot", esc(v("mascot").value || "—"), v("mascot").overridden)
     + row("Primary", colorText(v("primary_color").value, v("primary_color_hex").value), v("primary_color").overridden || v("primary_color_hex").overridden)
@@ -146,11 +149,11 @@ export function lookRow(look, editing) {
       const from = look.source === "file" ? "From the file" : "Added here";
       return input(f, label, kind, v.value, v.overridden ? `${from}: ${esc(look.base[f] ?? "blank")} <span class="ms-tag ms-tag--override">override</span>` : "");
     }).join("");
-    return `<div class="ms-look ms-look--open">${mark}<form class="ms-form" data-form="look" data-id="${look.id}">${fields}`
+    return `<div class="ms-look ms-look--open">${mark}<form class="fb-form ms-form" data-form="look" data-id="${look.id}">${fields}`
       + `<label class="ms-check ms-wide"><input type="checkbox" name="approximate"${e.approximate ? " checked" : ""}> Approximate colors (standard shades, not the school’s own)</label>`
-      + `<div class="ms-save"><button class="ms-primary" type="submit">Save</button><button type="button" data-cancel>Cancel</button>`
-      + (Object.keys(look.overrides).length ? `<button type="button" data-reset-look="${look.id}">Reset to ${look.source === "file" ? "the file" : "as added"}</button>` : "")
-      + (look.source === "moderator" ? `<button type="button" class="ms-danger" data-delete-look="${look.id}">Delete</button>` : "")
+      + `<div class="ms-save"><button class="fb-submit" type="submit">Save</button><button type="button" class="mod-button" data-cancel>Cancel</button>`
+      + (Object.keys(look.overrides).length ? `<button type="button" class="mod-button" data-reset-look="${look.id}">Reset to ${look.source === "file" ? "the file" : "as added"}</button>` : "")
+      + (look.source === "moderator" ? `<button type="button" class="mod-button ms-danger" data-delete-look="${look.id}">Delete</button>` : "")
       + `</div><p class="ms-src ms-wide">${look.source === "file"
         ? "Your changes are kept as overrides of the looks file’s values. To remove this look, take it out of backend/data/school_looks.csv."
         : "Added here: the looks file’s pipeline leaves it alone."}</p></form></div>`;
@@ -159,16 +162,16 @@ export function lookRow(look, editing) {
   return `<div class="ms-look">${mark}<span><span class="ms-when">${esc(spanLabel(e.first_season, e.last_season))}</span> · ${esc(e.mascot || "—")}`
     + `${e.approximate ? `<span class="ms-tag">approximate colors</span>` : ""}${over}<br>`
     + `<span class="ms-src">${colorText(e.primary_color, e.primary_color_hex)} · ${colorText(e.secondary_color, e.secondary_color_hex)} · ${look.source === "file" ? "from the file" : "added here"}</span></span>`
-    + `<button type="button" data-edit="look-${look.id}">Edit</button></div>`;
+    + `<button type="button" class="mod-button" data-edit="look-${look.id}">Edit</button></div>`;
 }
 
 /** The form for a new past look. */
 export function newLookForm() {
-  return `<div class="ms-look ms-look--open"><form class="ms-form" data-form="new-look">`
+  return `<div class="ms-look ms-look--open"><form class="fb-form ms-form" data-form="new-look">`
     + LOOK_FIELDS.map(([f, label, kind]) => input(f, label, kind, "")).join("")
     + `<label class="ms-check ms-wide"><input type="checkbox" name="approximate"> Approximate colors (standard shades, not the school’s own)</label>`
     + input("note", "Note", "text", "")
-    + `<div class="ms-save"><button class="ms-primary" type="submit">Add the look</button><button type="button" data-cancel>Cancel</button></div></form></div>`;
+    + `<div class="ms-save"><button class="fb-submit" type="submit">Add the look</button><button type="button" class="mod-button" data-cancel>Cancel</button></div></form></div>`;
 }
 
 /** An image path as a URL (*base*: where stored paths are served from; a full URL passes through). */
@@ -183,25 +186,25 @@ export function logoRow(logo, base, editing) {
   const label = `<span><span class="ms-when">${esc(logo.logo_type[0].toUpperCase() + logo.logo_type.slice(1))}</span> · ${esc(spanLabel(logo.year_start, logo.year_end))}`
     + `${logo.is_primary ? `<span class="ms-tag">primary</span>` : ""}${logo.has_keyline ? `<span class="ms-tag">keyline</span>` : ""}`
     + (logo.notes ? `<br><span class="ms-src">${esc(logo.notes)}</span>` : "") + "</span>";
-  if (editing !== `logo-${logo.id}`) return `<div class="ms-look">${img}${label}<button type="button" data-edit="logo-${logo.id}">Edit</button></div>`;
-  return `<div class="ms-look ms-look--open">${img}<form class="ms-form" data-form="logo" data-id="${logo.id}">`
+  if (editing !== `logo-${logo.id}`) return `<div class="ms-look">${img}${label}<button type="button" class="mod-button" data-edit="logo-${logo.id}">Edit</button></div>`;
+  return `<div class="ms-look ms-look--open">${img}<form class="fb-form ms-form" data-form="logo" data-id="${logo.id}">`
     + input("year_start", "First season", "season", logo.year_start ?? "") + input("year_end", "Last season", "season", logo.year_end ?? "")
     + input("notes", "Notes", "text", logo.notes ?? "")
     + `<label class="ms-check"><input type="checkbox" name="is_primary"${logo.is_primary ? " checked" : ""}> Primary</label>`
     + `<label class="ms-check"><input type="checkbox" name="has_keyline"${logo.has_keyline ? " checked" : ""}> Has its keyline</label>`
     + `<label class="ms-field ms-wide"><span>${logo.image_url ? "Replace the image" : "Upload the image"}</span><input type="file" name="image" accept="image/*"></label>`
-    + `<div class="ms-save"><button class="ms-primary" type="submit">Save</button><button type="button" data-cancel>Cancel</button><button type="button" class="ms-danger" data-delete-logo="${logo.id}">Delete</button></div></form></div>`;
+    + `<div class="ms-save"><button class="fb-submit" type="submit">Save</button><button type="button" class="mod-button" data-cancel>Cancel</button><button type="button" class="mod-button ms-danger" data-delete-logo="${logo.id}">Delete</button></div></form></div>`;
 }
 
 /** The form for a new logo. */
 export function newLogoForm() {
-  return `<div class="ms-look ms-look--open"><form class="ms-form" data-form="new-logo">`
-    + `<label class="ms-field"><span>Type</span><select name="logo_type"><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="tertiary">Tertiary</option></select></label>`
+  return `<div class="ms-look ms-look--open"><form class="fb-form ms-form" data-form="new-logo">`
+    + `<label class="fb-field"><span>Type</span><select name="logo_type"><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="tertiary">Tertiary</option></select></label>`
     + `<span></span>` + input("year_start", "First season", "season", "") + input("year_end", "Last season", "season", "")
     + input("notes", "Notes", "text", "")
     + `<label class="ms-check"><input type="checkbox" name="is_primary"> Primary</label>`
     + `<label class="ms-field ms-wide"><span>Image</span><input type="file" name="image" accept="image/*"></label>`
-    + `<div class="ms-save"><button class="ms-primary" type="submit">Add the logo</button><button type="button" data-cancel>Cancel</button></div></form></div>`;
+    + `<div class="ms-save"><button class="fb-submit" type="submit">Add the logo</button><button type="button" class="mod-button" data-cancel>Cancel</button></div></form></div>`;
 }
 
 /** A helmet design's row, or its open form. */
@@ -211,25 +214,55 @@ export function helmetRow(helmet, base, editing) {
   const what = [helmet.color, helmet.finish, helmet.logo, helmet.stripe].filter(Boolean).join(" · ");
   const label = `<span><span class="ms-when">${esc(spanLabel(helmet.year_first_worn, helmet.year_last_worn))}</span>`
     + `${helmet.is_primary ? `<span class="ms-tag">primary</span>` : ""}${what ? `<br><span class="ms-src">${esc(what)}</span>` : ""}</span>`;
-  if (editing !== `helmet-${helmet.id}`) return `<div class="ms-look">${img}${label}<button type="button" data-edit="helmet-${helmet.id}">Edit</button></div>`;
-  return `<div class="ms-look ms-look--open">${img}<form class="ms-form" data-form="helmet" data-id="${helmet.id}">`
+  if (editing !== `helmet-${helmet.id}`) return `<div class="ms-look">${img}${label}<button type="button" class="mod-button" data-edit="helmet-${helmet.id}">Edit</button></div>`;
+  return `<div class="ms-look ms-look--open">${img}<form class="fb-form ms-form" data-form="helmet" data-id="${helmet.id}">`
     + input("year_first_worn", "First season worn", "year", helmet.year_first_worn ?? "") + input("year_last_worn", "Last season worn", "season", helmet.year_last_worn ?? "")
     + input("color", "Color", "text", helmet.color ?? "") + input("finish", "Finish", "text", helmet.finish ?? "")
     + input("facemask_color", "Facemask", "text", helmet.facemask_color ?? "") + input("logo", "Logo", "text", helmet.logo ?? "")
     + input("stripe", "Stripe", "text", helmet.stripe ?? "") + input("notes", "Notes", "text", helmet.notes ?? "")
     + `<label class="ms-check ms-wide"><input type="checkbox" name="is_primary"${helmet.is_primary ? " checked" : ""}> Primary</label>`
-    + ["right", "left", "photo"].map((t) => `<label class="ms-field"><span>${t === "photo" ? "Photo" : `Facing ${t}`}</span><input type="file" name="image_${t}" accept="image/*"></label>`).join("")
-    + `<div class="ms-save"><button class="ms-primary" type="submit">Save</button><button type="button" data-cancel>Cancel</button><button type="button" class="ms-danger" data-delete-helmet="${helmet.id}">Delete</button></div></form></div>`;
+    + ["right", "left", "photo"].map((t) => `<label class="fb-field"><span>${t === "photo" ? "Photo" : `Facing ${t}`}</span><input type="file" name="image_${t}" accept="image/*"></label>`).join("")
+    + `<div class="ms-save"><button class="fb-submit" type="submit">Save</button><button type="button" class="mod-button" data-cancel>Cancel</button><button type="button" class="mod-button ms-danger" data-delete-helmet="${helmet.id}">Delete</button></div></form></div>`;
 }
 
 /** The form for a new helmet design. */
 export function newHelmetForm() {
-  return `<div class="ms-look ms-look--open"><form class="ms-form" data-form="new-helmet">`
+  return `<div class="ms-look ms-look--open"><form class="fb-form ms-form" data-form="new-helmet">`
     + input("year_first_worn", "First season worn", "year", "") + input("year_last_worn", "Last season worn", "season", "")
     + input("color", "Color", "text", "") + input("finish", "Finish", "text", "")
     + `<label class="ms-check ms-wide"><input type="checkbox" name="is_primary"> Primary</label>`
-    + ["right", "left", "photo"].map((t) => `<label class="ms-field"><span>${t === "photo" ? "Photo" : `Facing ${t}`}</span><input type="file" name="image_${t}" accept="image/*"></label>`).join("")
-    + `<div class="ms-save"><button class="ms-primary" type="submit">Add the helmet</button><button type="button" data-cancel>Cancel</button></div></form></div>`;
+    + ["right", "left", "photo"].map((t) => `<label class="fb-field"><span>${t === "photo" ? "Photo" : `Facing ${t}`}</span><input type="file" name="image_${t}" accept="image/*"></label>`).join("")
+    + `<div class="ms-save"><button class="fb-submit" type="submit">Add the helmet</button><button type="button" class="mod-button" data-cancel>Cancel</button></div></form></div>`;
+}
+
+/** A season's place: "Region 6-1A", "1A Independent", or "Independent". */
+export function seasonPlace(row) {
+  if (row.region == null) return row.class ? `${row.class}A Independent` : "Independent";
+  return `Region ${row.region}-${row.class}A`;
+}
+
+/**
+ * The school's seasons (school_seasons), newest first: each one's class and region and whether it's
+ * playing, with an Edit (a quick fix until the season's region file has the change).
+ */
+export function seasonsSection(rows, editing) {
+  const items = rows.map((r) => {
+    if (editing !== `season-${r.season}`) {
+      return `<div class="ms-row ms-row--action"><span class="ms-k">${esc(r.season)}</span>`
+        + `<span>${esc(seasonPlace(r))}${r.is_active ? "" : ` <span class="ms-tag">not playing</span>`}</span>`
+        + `<button type="button" class="mod-button" data-edit="season-${r.season}">Edit</button></div>`;
+    }
+    // An independent's class and region come from the region file only (this API can't clear a region).
+    const fixed = r.region == null;
+    return `<form class="fb-form ms-form" data-form="season" data-season="${r.season}"><p class="ms-when ms-wide">${esc(r.season)}</p>`
+      + (fixed ? `<p class="ms-src ms-wide">${esc(seasonPlace(r))}: an independent’s class and region come from the region file.</p>`
+        : `<label class="fb-field"><span>Class</span><select name="class">${[1, 2, 3, 4, 5, 6, 7].map((c) => `<option value="${c}"${c === r.class ? " selected" : ""}>${c}A</option>`).join("")}</select></label>`
+          + input("region", "Region", "region", r.region))
+      + `<label class="ms-check ms-wide"><input type="checkbox" name="is_active"${r.is_active ? " checked" : ""}> Playing this season</label>`
+      + `<div class="ms-save"><button class="fb-submit" type="submit">Save</button><button type="button" class="mod-button" data-cancel>Cancel</button></div>`
+      + `<p class="ms-src ms-wide">The next regions load writes the season’s region file over a class or region set here. A school not playing is left out of that season’s standings and odds.</p></form>`;
+  }).join("");
+  return `<section class="ms-sec"><h3>Seasons</h3>${items || `<p class="ms-src">None yet.</p>`}</section>`;
 }
 
 /** The season strip: each season's helmet as the site draws it (*seasons*: [{ season, team }]). */
@@ -248,13 +281,17 @@ export function schoolHtml(data, editing) {
   return `<div class="ms-head">${teamMark(school.school, now, { size: 48 })}<h2>${esc(school.school)}</h2></div>`
     + (now ? `<p class="ms-sub">${esc(now.city || "")}${now.city ? " · " : ""}${now.region == null ? `${now.class_ ? `${now.class_}A ` : ""}Independent` : `Region ${now.region}-${now.class_}A`} in ${now.season}</p>` : "")
     + nowSection(school, editing)
-    + section("Past looks", ` <button type="button" data-edit="new-look">Add a look</button>`,
+    + section("Past looks", ` <button type="button" class="mod-button" data-edit="new-look">Add a look</button>`,
       (editing === "new-look" ? newLookForm() : "") + looks.map((l) => lookRow(l, editing)).join(""), "None: every season has its look now.")
-    + section("Logos", ` <button type="button" data-edit="new-logo">Add a logo</button>`,
+    + section("Logos", ` <button type="button" class="mod-button" data-edit="new-logo">Add a logo</button>`,
       (editing === "new-logo" ? newLogoForm() : "") + logos.map((l) => logoRow(l, school.image_base, editing)).join(""), "None yet.")
-    + section("Helmets", ` <button type="button" data-edit="new-helmet">Add a helmet</button>`,
+    + section("Helmets", ` <button type="button" class="mod-button" data-edit="new-helmet">Add a helmet</button>`,
       (editing === "new-helmet" ? newHelmetForm() : "") + helmets.map((h) => helmetRow(h, school.image_base, editing)).join(""), "None yet: a plain helmet in its colors.")
-    + `<section class="ms-sec"><h3>How it looks each season</h3>${seasonStrip(seasons)}</section>`;
+    + `<section class="ms-sec"><h3>How it looks each season</h3>${seasonStrip(seasons)}</section>`
+    + seasonsSection(data.seasonRows ?? [], editing)
+    + `<section class="ms-sec"><h3>Maintenance</h3><div class="ms-row ms-row--action"><span class="ms-k">Colors</span>`
+    + `<span>Work out ${esc(school.school)}’s color variants again from its colors</span>`
+    + `<button type="button" class="mod-button" data-recompute>Recompute colors</button></div></section>`;
 }
 
 // ------------------------------------------------------------ the page
@@ -272,7 +309,7 @@ export function schoolsTab(root, { api, upload, start = null, onSchool = () => {
     const el = root.querySelector("[data-ms-status]");
     if (el) {
       el.textContent = text;
-      el.classList.toggle("is-bad", bad);
+      el.classList.toggle("is-error", bad);
     }
   };
   const json = async (res) => {
@@ -292,14 +329,14 @@ export function schoolsTab(root, { api, upload, start = null, onSchool = () => {
   async function load(name) {
     status(`Loading ${name}…`);
     const enc = encodeURIComponent(name);
-    const [school, looks, logos, helmets, seasonList] = await Promise.all([
+    const [school, looks, logos, helmets, seasonList, seasonRows] = await Promise.all([
       api(`/admin/schools/${enc}`).then(json), api(`/admin/schools/${enc}/looks`).then(json),
       api(`/teams/${enc}/logos`).then(json), api(`/teams/${enc}/helmets`).then(json),
-      api("/seasons").then(json),
+      api("/seasons").then(json), api(`/admin/school-seasons/${enc}`).then(json),
     ]);
     const all = await Promise.all(seasonList.map((s) => api(`/teams/${enc}?season=${s.season}`).then((r) => (r.ok ? r.json() : null))));
     const seasons = all.filter(Boolean).map((team) => ({ season: team.season, team })).sort((a, b) => a.season - b.season);
-    data = { school, looks, logos, helmets, seasons };
+    data = { school, looks, logos, helmets, seasons, seasonRows };
     editing = null;
     draw();
     status("");
@@ -330,7 +367,18 @@ export function schoolsTab(root, { api, upload, start = null, onSchool = () => {
     const v = values(form);
     const kind = form.dataset.form;
     const id = form.dataset.id;
-    if (kind === "now") {
+    if (kind === "season") {
+      const season = form.dataset.season;
+      const row = data.seasonRows.find((r) => String(r.season) === season);
+      const active = checked(form, "is_active");
+      const clazz = form.elements.class ? Number(form.elements.class.value) : row.class;
+      const region = form.elements.region ? Number(v.region) : row.region;
+      if (row.region != null && (clazz !== row.class || region !== row.region)) {
+        await json(await api(`/admin/school-seasons/${enc}/${season}`, { method: "PUT", body: { class: clazz, region, is_active: active } }));
+      } else if (active !== row.is_active) {
+        await json(await api(`/admin/school-seasons/${enc}/${season}`, { method: "PATCH", body: { is_active: active } }));
+      }
+    } else if (kind === "now") {
       for (const c of overrideChanges(SCHOOL_FIELDS, data.school.base, data.school.overrides, v)) {
         await json(c.clear ? await api(`/admin/schools/${enc}/overrides/${c.field}`, { method: "DELETE" })
           : await api(`/admin/schools/${enc}/overrides`, { method: "PUT", body: { field: c.field, value: c.value } }));
@@ -373,7 +421,7 @@ export function schoolsTab(root, { api, upload, start = null, onSchool = () => {
   root.innerHTML = `<form class="ms-find" data-ms-find role="search"><label for="ms-school" class="visually-hidden">Find a school</label>`
     + `<input id="ms-school" list="ms-schools" placeholder="Find a school" autocomplete="off"><datalist id="ms-schools"></datalist>`
     + `<button type="submit" class="mod-button">Open</button></form>`
-    + `<p class="ms-status" data-ms-status role="status"></p><div data-ms-school></div>`;
+    + `<p class="fb-status" data-ms-status role="status"></p><div data-ms-school></div>`;
 
   root.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -409,6 +457,17 @@ export function schoolsTab(root, { api, upload, start = null, onSchool = () => {
     if (edit) {
       editing = edit.dataset.edit;
       draw();
+      return;
+    }
+    if (e.target.closest("[data-recompute]")) {
+      status("Recomputing…");
+      try {
+        await json(await api(`/admin/schools/${encodeURIComponent(data.school.school)}/recompute-colors`, { method: "POST" }));
+        await load(data.school.school);
+        status("Colors recomputed.");
+      } catch (err) {
+        status(err.message, true);
+      }
       return;
     }
     if (e.target.closest("[data-cancel]")) {

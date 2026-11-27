@@ -5,6 +5,24 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.48.0
+
+/moderate can now correct games, venues and a school's seasons without the API, and lists every
+override in one place. Its tabs (Queue, Schools, Games, Venues, Overrides) use the site's own
+segmented control, buttons and fields.
+
+- **Games:** a team's games in a season, each with its score, and Region or its round. Editing one
+  sets its score, status, round, region game, overtime, where it was played, venue, kickoff (Central
+  time) and the helmet the team wore, as overrides of that team's row, each marked with what's
+  stored.
+- **Schools:** each season's class, region and whether the school is playing (a quick fix until the
+  region file has it), and a button to work out its color variants again.
+- **Venues:** each season's championship venue by class, and every venue: its name, city, home team
+  and spot (the last two kept as overrides), and adding one.
+- **Overrides:** every override on file (schools, past looks, games, venues), each opened on its tab
+  or cleared; and the maintenance jobs: working out every school's colors again, and the logos to
+  re-cut.
+
 ## 1.47.0
 
 A Schools tab on /moderate, beside the queue: find any school (closed ones too) and correct its look

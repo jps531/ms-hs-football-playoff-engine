@@ -100,5 +100,9 @@ RETURNS TABLE(source TEXT, key TEXT, value TEXT) AS $$
   UNION ALL
   SELECT 'game:' || school || ':' || date::text, kv.key, kv.value
   FROM games, jsonb_each_text(overrides) AS kv
+  WHERE overrides != '{}'::jsonb
+  UNION ALL
+  SELECT 'look:' || id::text || ':' || school, kv.key, kv.value
+  FROM school_looks, jsonb_each_text(overrides) AS kv
   WHERE overrides != '{}'::jsonb;
 $$ LANGUAGE sql;
