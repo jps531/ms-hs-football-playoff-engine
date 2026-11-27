@@ -10,10 +10,17 @@ MHSAA assigns classes and regions on a two-year cycle, and each cycle has one fi
 ``school`` is the site's name for the school. ``seasons`` is blank for every season of the cycle,
 or names the one season a line holds for (a school that moved, closed or was renamed mid-cycle).
 
+A school that played without a region (an independent) has its ``region`` blank, and its ``class``
+too when it had none::
+
+    Hickory Flat,1,,
+    Some Academy,,,
+
 ``assignments_for_season`` gives a season's schools; ``problems`` checks them before anything is
 loaded: every name a school the site knows or one the changes in ``data_helpers`` add, no school
-twice, every class's regions numbered from 1 with enough teams to play, and every school from the
-season before accounted for (still here, renamed, continued by another, or stopped playing).
+twice, the season's classes (``classes_for_season``: six before 2023) each with regions numbered
+from 1 and enough teams to play, and every school from the season before accounted for (still here,
+renamed, continued by another, or stopped playing).
 """
 
 from __future__ import annotations
@@ -28,6 +35,7 @@ from backend.helpers.data_helpers import (
     SCHOOL_SUCCESSORS,
     school_name_for_season,
 )
+from backend.helpers.engine_settings import classes_for_season
 
 REGIONS_DIR = Path(__file__).resolve().parents[1] / "data" / "regions"
 FIELDS = ["school", "class", "region", "seasons"]
@@ -45,8 +53,19 @@ def cycle_path(season: int) -> Path:
     return REGIONS_DIR / f"{first}-{(first + 2) % 100:02d}.csv"
 
 
+Place = tuple[int | None, int | None]
+"""A school's (class, region) in a season; region None for an independent, class None when it had none."""
+
+
+def _number(text: str | None) -> int | None:
+    """A blank cell's None, or the cell's whole number."""
+    text = (text or "").strip()
+    return int(text) if text else None
+
+
 def read_cycle(path: Path) -> list[dict]:
-    """A cycle file's lines as {school, class, region, seasons}; ``seasons`` is a set (empty: every season)."""
+    """A cycle file's lines as {school, class, region, seasons}; ``seasons`` is a set (empty: every season),
+    ``class`` and ``region`` None where blank (an independent)."""
     with path.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         if reader.fieldnames != FIELDS:
@@ -60,20 +79,22 @@ def read_cycle(path: Path) -> list[dict]:
                 rows.append(
                     {
                         "school": line["school"].strip(),
-                        "class": int(line["class"]),
-                        "region": int(line["region"]),
+                        "class": _number(line["class"]),
+                        "region": _number(line["region"]),
                         "seasons": seasons,
                     }
                 )
             except (TypeError, ValueError) as e:
                 raise ValueError(f"{path.name} line {n}: {e}") from None
+            if rows[-1]["region"] is not None and rows[-1]["class"] is None:
+                raise ValueError(f"{path.name} line {n}: {rows[-1]['school']} has a region but no class")
     return rows
 
 
-def assignments_for_season(season: int, path: Path | None = None) -> dict[str, tuple[int, int]]:
+def assignments_for_season(season: int, path: Path | None = None) -> dict[str, Place]:
     """Each school's (class, region) in *season*, from its cycle's file: the lines for every season of
     the cycle and the ones naming *season*. Raises ValueError for a school given two places."""
-    out: dict[str, tuple[int, int]] = {}
+    out: dict[str, Place] = {}
     path = path or cycle_path(season)
     for row in read_cycle(path):
         if row["seasons"] and season not in row["seasons"]:
@@ -99,9 +120,10 @@ def accounted_for(school: str, season: int, assigned: dict) -> bool:
     return any(name == school and last == season - 1 for name, last, _ in SCHOOL_STOPPED_PLAYING)
 
 
-def problems(assigned: dict[str, tuple[int, int]], season: int, known: set[str], prior: set[str] | None) -> list[str]:
+def problems(assigned: dict[str, Place], season: int, known: set[str], prior: set[str] | None) -> list[str]:
     """What's wrong with *season*'s assignments, as sentences ([] when nothing is). *known* is every
-    school the site has (``schools``); *prior* the schools of the season before (None to skip that check)."""
+    school the site has (``schools``); *prior* the schools of the season before (None to skip that check).
+    Independents count as here, and need only a class of the season's (or none)."""
     out = []
     allowed = known | new_names(season)
     for school in sorted(set(assigned) - allowed):
@@ -109,21 +131,23 @@ def problems(assigned: dict[str, tuple[int, int]], season: int, known: set[str],
             f"{school} isn't a school the site knows. Fix the spelling to the site's name, or add it to "
             f"SCHOOL_RENAMES or SCHOOL_SUCCESSORS (or to schools, for a school that's new)."
         )
+    classes = classes_for_season(season)
     by_class: dict[int, dict[int, int]] = defaultdict(lambda: defaultdict(int))
-    for clazz, region in assigned.values():
-        by_class[clazz][region] += 1
-    for clazz in range(1, 8):
+    for school, (clazz, region) in sorted(assigned.items()):
+        if clazz is not None and clazz not in classes:
+            out.append(f"{school}'s class {clazz} isn't one of {season}'s classes (1A-{classes[-1]}A).")
+        elif region is not None:
+            by_class[clazz][region] += 1
+    for clazz in classes:
         regions = by_class.get(clazz)
         if not regions:
-            out.append(f"Class {clazz}A has no schools.")
+            out.append(f"Class {clazz}A has no regions.")
             continue
         if sorted(regions) != list(range(1, len(regions) + 1)):
             out.append(f"Class {clazz}A's regions aren't numbered 1 to {len(regions)}: {sorted(regions)}.")
         for region, n in sorted(regions.items()):
             if n < MIN_REGION_TEAMS:
                 out.append(f"Region {region}-{clazz}A has {n} {'school' if n == 1 else 'schools'}.")
-    for clazz in sorted(set(by_class) - set(range(1, 8))):
-        out.append(f"Class {clazz} isn't a class (1-7).")
     for school in sorted(prior or ()):
         if not accounted_for(school, season, assigned):
             out.append(

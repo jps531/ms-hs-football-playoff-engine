@@ -92,7 +92,7 @@ from backend.helpers.data_classes import (
     StoredHostingOdds,
     TiebreakDecision,
 )
-from backend.helpers.engine_settings import FULL_MARGINS_MAX_LEFT, PLAYOFF_SEEDS
+from backend.helpers.engine_settings import FULL_MARGINS_MAX_LEFT, PLAYOFF_SEEDS, classes_for_season
 from backend.helpers.home_game_scenarios import enumerate_home_game_scenarios, enumerate_reach_scenarios_for_team
 from backend.helpers.insights import _conditions_frozenset, deserialize_insights
 from backend.helpers.query_helpers import and_join_conditions
@@ -189,15 +189,7 @@ def current_season() -> int:
 
 def default_classes_for_season(season: int) -> list[int]:
     """MHSAA class count by year, used when school_seasons has no rows yet for *season*."""
-    if season <= 1983:
-        max_class = 4
-    elif season <= 2008:
-        max_class = 5
-    elif season <= 2022:
-        max_class = 6
-    else:
-        max_class = 7
-    return list(range(1, max_class + 1))
+    return classes_for_season(season)
 
 
 async def _load_format_slots(conn, season: int, clazz: int) -> list[FormatSlot]:  # pragma: no cover

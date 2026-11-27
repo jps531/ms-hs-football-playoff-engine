@@ -157,8 +157,8 @@ class TeamModel(BaseModel):
     logo_secondary: str
     logo_tertiary: str
     season: int
-    class_: int
-    region: int
+    class_: int | None
+    region: int | None
     city: str
     mascot: str
     primary_color: str
@@ -1078,8 +1078,8 @@ class UpsetModel(BaseModel):
     points_for: int
     points_against: int
     pregame_prob: float
-    class_: int
-    region: int
+    class_: int | None
+    region: int | None
     region_game: bool
 
 
@@ -1122,8 +1122,8 @@ class MoverModel(BaseModel):
     """A team's Elo change between two rating snapshots."""
 
     school: str
-    class_: int
-    region: int
+    class_: int | None
+    region: int | None
     elo_before: float
     elo_after: float
     delta: float

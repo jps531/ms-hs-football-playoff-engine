@@ -15,7 +15,7 @@ All endpoints are under `/api/v1`. Interactive docs are at [localhost:8000/docs]
 | GET | `/seasons` | The seasons with a schedule (enrolled teams and at least one game), newest first. The site shows the first as the current season, so regions loaded ahead of a season don't change it until that season's games are in. |
 | GET | `/seasons/{season}/structure` | All classes and regions with team counts for a season |
 | GET | `/seasons/{season}/dates` | Notable game dates for a timeline scrubber (round, week, game count); optional `class` filter. Params: `season`, `class` |
-| GET | `/teams` | List teams; `season` required, optional `class` and `region` filters. Each team includes `helmet_url` — the full image URL of its resolved helmet for that season (same resolution order as `/teams/{team}/helmets/resolved`, right-side view preferred, else left), or `null` |
+| GET | `/teams` | List teams; `season` required, optional `class` and `region` filters. An independent (a team that played that season without a region) has `region: null`, and `class_: null` too when it had no class. Each team includes `helmet_url` — the full image URL of its resolved helmet for that season (same resolution order as `/teams/{team}/helmets/resolved`, right-side view preferred, else left), or `null` |
 | GET | `/teams/{team}` | Metadata for a single team in a season — includes `latitude`, `longitude`, `zip`, and `secondary_color_hex` when available |
 | GET | `/teams/{team}/helmets` | All helmet designs for a team; optional `year` filter |
 | GET | `/teams/{team}/logos` | Logo asset history for a team (`team_logos` rows); optional `logo_type` (`primary`/`secondary`/`tertiary`) and `year` filters |

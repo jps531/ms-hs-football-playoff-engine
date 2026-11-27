@@ -42,6 +42,13 @@ Leake Central,4,5,2025
 `school` is the site's name for the school. `seasons` is blank for both seasons of the cycle, or
 names the one season a line holds for (a mid-cycle move, a season without a team, or a rename).
 
+A school that played without a region (an independent) has a blank `region`, and a blank `class` too
+when it had none that season: `Hickory Flat,1,,2017`. It's stored for the season (its games and
+ratings count) but stays off region standings, brackets and, for now, the region maps.
+
+A season's classes are its own: 1A-6A through 2022, 1A-7A from 2023 (`classes_for_season` in
+`backend/helpers/engine_settings.py`).
+
 **For a new cycle:**
 
 1. Draft the file from MHSAA's article, in the worker container (it has the browser):
@@ -58,8 +65,9 @@ names the one season a line holds for (a mid-cycle move, a season without a team
 2. Check the file, commit it, deploy.
 3. Run `regions-data-pipeline` (Custom Run) for each season of the cycle. It checks the season
    against the database before writing anything and stops, listing every problem, if a name isn't a
-   school the site knows, a region has fewer than three schools, a class's regions aren't numbered
-   from 1, or a school from the season before has no place.
+   school the site knows, a class of the season has no regions (or a school has a class the season
+   didn't have), a region has fewer than three schools, a class's regions aren't numbered from 1, or a
+   school from the season before has no place.
 4. Run `share-assets` (or wait for the next daily update). The Regions page (`/maps/regions/{class}a`)
    then opens on the new cycle, with its maps and images to share; the cycles before stay in its
    season picker. A school with no coordinates, or coordinates outside Mississippi, is listed but

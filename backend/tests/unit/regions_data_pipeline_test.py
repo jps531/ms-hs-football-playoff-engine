@@ -103,7 +103,38 @@ def test_each_problem_is_named():
     assert "Region 2-3A has 2 schools." in out
     assert "Class 6A's regions aren't numbered 1 to 4: [1, 2, 3, 5]." in out
     assert any(p.startswith("Gone played in 2026 but isn't in 2027's file") for p in out)
-    assert "Class 7A has no schools." in problems({k: v for k, v in season.items() if v[0] != 7}, 2027, known, None)
+    assert "Class 7A has no regions." in problems({k: v for k, v in season.items() if v[0] != 7}, 2027, known, None)
+
+
+SIX = {(c, r): 4 for c in range(1, 7) for r in range(1, (5 if c == 1 else 9 if c <= 4 else 5))}
+
+
+def test_a_seasons_classes_are_its_own():
+    """Before 2023 there were six classes (1A had four regions): a 2017 season of 1A-6A is whole, and a
+    7A school then is an error; from 2023 there are seven."""
+    season = _season(SIX)
+    assert problems(season, 2017, set(season), None) == []
+    out = problems({**season, "Big": (7, 1)}, 2017, set(season) | {"Big"}, None)
+    assert out == ["Big's class 7 isn't one of 2017's classes (1A-6A)."]
+    assert "Class 7A has no regions." in problems(season, 2023, set(season), None)
+
+
+def test_an_independent_played_but_has_no_region(tmp_path):
+    """A blank region is an independent (its class blank too when it had none). It counts as here for
+    last season's check, but not toward any region's size; a region with no class is an error."""
+    path = _write(tmp_path, ["Raleigh,3,6,", "Hickory Flat,1,,", "Some Academy,,,2025"])
+    s25, s26 = assignments_for_season(2025, path), assignments_for_season(2026, path)
+    assert s25["Hickory Flat"] == s26["Hickory Flat"] == (1, None)
+    assert s25["Some Academy"] == (None, None) and "Some Academy" not in s26
+    with pytest.raises(ValueError, match="line 2: Raleigh has a region but no class"):
+        read_cycle(_write(tmp_path, ["Raleigh,,6,"]))
+    season = {**_season(FULL), "Hickory Flat": (1, None), "Some Academy": (None, None)}
+    assert problems(season, 2027, set(season), set(season)) == []
+    small = {**_season({**FULL, (3, 2): 2}), "Loner": (3, None)}
+    assert "Region 2-3A has 2 schools." in problems(small, 2027, set(small), None)
+    assert problems({"Hickory Flat": (8, None), **_season(FULL)}, 2027, set(season), None) == [
+        "Hickory Flat's class 8 isn't one of 2027's classes (1A-7A)."
+    ]
 
 
 def test_a_rename_successor_or_closure_accounts_for_last_seasons_school():

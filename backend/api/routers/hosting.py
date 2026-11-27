@@ -283,7 +283,8 @@ async def simulate_class_hosting(
             raise HTTPException(status_code=404, detail=f"No playoff format found for {clazz}A season {season}")
 
         all_school_rows = await conn.execute(
-            "SELECT school, region FROM school_seasons WHERE season=%s AND class=%s AND is_active=TRUE ORDER BY region, school",
+            "SELECT school, region FROM school_seasons WHERE season=%s AND class=%s AND region IS NOT NULL"
+            " AND is_active=TRUE ORDER BY region, school",
             (season, clazz),
         )
         school_to_region: dict[str, int] = {}

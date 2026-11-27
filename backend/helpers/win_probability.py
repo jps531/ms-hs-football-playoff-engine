@@ -92,12 +92,15 @@ class EloConfig:
 # ---------------------------------------------------------------------------
 
 
+def _class_of(s: School | None) -> int:
+    """The class a school's Elo starts from: its own, or 1A for a school the site doesn't know or one
+    with no class that season (an independent that had none)."""
+    return (s.class_ if s else None) or 1
+
+
 def _class_prior(school: str, schools_by_name: dict[str, School], config: EloConfig) -> float:
     """Return the starting Elo rating for a school based on its classification."""
-    s = schools_by_name.get(school)
-    if s is None:
-        return config.class_ratings[0]
-    return config.class_ratings[s.class_ - 1]
+    return config.class_ratings[_class_of(schools_by_name.get(school)) - 1]
 
 
 def _apply_carryover(
@@ -183,7 +186,9 @@ def initial_elo_ratings(
     backfill for a team's first game (no in-season snapshot yet exists for it).
     """
     return {
-        s.school: _apply_carryover(config.class_ratings[s.class_ - 1], s.school, prior_ratings, config.carryover_factor)
+        s.school: _apply_carryover(
+            config.class_ratings[_class_of(s) - 1], s.school, prior_ratings, config.carryover_factor
+        )
         for s in schools
     }
 
@@ -442,7 +447,7 @@ def make_win_prob_fn(
         idx = bisect.bisect_right(snapshot_dates, target) - 1
         if idx < 0:
             # Before any games were played — return classification priors
-            return {s.school: cfg.class_ratings[s.class_ - 1] for s in schools}
+            return {s.school: cfg.class_ratings[_class_of(s) - 1] for s in schools}
         return snapshots[idx][1]
 
     def win_prob_fn(
@@ -856,8 +861,8 @@ def win_prob_with_factors(
 
     school_a = schools_by_name.get(team_a)
     school_b = schools_by_name.get(team_b)
-    class_a = school_a.class_ if school_a else 1
-    class_b = school_b.class_ if school_b else 1
+    class_a = _class_of(school_a)
+    class_b = _class_of(school_b)
 
     raw_prob = _elo_expected(r_a, r_b, cfg.scale)
 

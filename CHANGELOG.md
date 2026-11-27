@@ -5,6 +5,17 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.44.0
+
+Region files can now describe the seasons before 2023, ready for loading 2015-2024:
+
+- **Each season's own classes:** a season's region file is checked against the classes MHSAA had
+  then (1A-6A through 2022, 1A-7A from 2023), not always seven.
+- **Independents:** a school that played a season without a region goes in the file with its
+  region left blank (and its class too, when it had none). It's stored for that season, so its
+  games and ratings count, but it stays off region standings and brackets, and the team search
+  doesn't send it to standings it doesn't have. The maps don't show independents yet.
+
 ## 1.43.0
 
 One share sheet on every Maps view (a class's Season, Compare and Timeline, and the Counties pages),

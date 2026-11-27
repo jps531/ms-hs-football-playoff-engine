@@ -26,3 +26,17 @@ PLAYOFF_SEEDS = 4
 
 CLASSES = (1, 2, 3, 4, 5, 6, 7)
 """MHSAA classifications, 1A-7A."""
+
+
+def classes_for_season(season: int) -> list[int]:
+    """MHSAA's classes in *season*: 1A-4A through 1983, 1A-5A through 2008, 1A-6A through 2022, then
+    1A-7A."""
+    if season <= 1983:
+        max_class = 4
+    elif season <= 2008:
+        max_class = 5
+    elif season <= 2022:
+        max_class = 6
+    else:
+        max_class = 7
+    return list(range(1, max_class + 1))

@@ -134,10 +134,12 @@ $$ LANGUAGE sql IMMUTABLE;
 CREATE TABLE IF NOT EXISTS school_seasons (
   school    TEXT    NOT NULL REFERENCES schools(school),
   season    INTEGER NOT NULL,
-  class     INTEGER NOT NULL,
-  region    INTEGER NOT NULL,
+  class     INTEGER,
+  region    INTEGER,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
-  PRIMARY KEY (school, season)
+  PRIMARY KEY (school, season),
+  -- An independent (played without a region) has no region, and no class when it had none.
+  CONSTRAINT school_seasons_region_needs_class CHECK (region IS NULL OR class IS NOT NULL)
 );
 
 
@@ -899,9 +901,11 @@ COMMENT ON COLUMN school_seasons.school IS
 COMMENT ON COLUMN school_seasons.season IS
   'Four-digit season year (e.g. 2025). Part of the primary key.';
 COMMENT ON COLUMN school_seasons.class IS
-  'MHSAA classification 1-7 (1A smallest enrollment, 7A largest).';
+  'MHSAA classification 1-7 (1A smallest enrollment, 7A largest). NULL for an independent '
+  'that had no class that season.';
 COMMENT ON COLUMN school_seasons.region IS
-  'Region number within the classification for this season (1-indexed).';
+  'Region number within the classification for this season (1-indexed). NULL for an '
+  'independent: a school that played that season without a region.';
 COMMENT ON COLUMN school_seasons.is_active IS
   'FALSE for schools that withdrew, merged, or were otherwise removed mid-season. '
   'Inactive schools are excluded from standings and scenario calculations.';

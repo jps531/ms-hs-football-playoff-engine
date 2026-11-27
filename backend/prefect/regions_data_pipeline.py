@@ -5,7 +5,8 @@ Each MHSAA cycle (two seasons) has a checked-in file in ``backend/data/regions/`
 and checked by a person. This flow reads the season's schools from it and checks them against the
 database before writing anything: every name a school the site knows (or a rename or successor
 starting this season), every region big enough, and every school from last season accounted for. A
-problem stops the flow with every problem listed, so nothing is half-loaded.
+problem stops the flow with every problem listed, so nothing is half-loaded. An independent (a school
+that played without a region) is written with no region, and no class when it had none.
 
 It then writes each school's class and region to ``school_seasons`` (adding a new school to
 ``schools``). A successor (``SCHOOL_SUCCESSORS``) takes its old school's campus, location and home
@@ -116,6 +117,9 @@ def regions_data_flow(season: int | None = None) -> int:
         raise ValueError(
             f"{path.name} isn't ready for {season}: {len(issues)} problems (listed above). Nothing was written."
         )
+    independents = sorted(s for s, (_, region) in assigned.items() if region is None)
+    if independents:  # a blank region is an independent: listed, so a missing region shows
+        logger.info("Independents (no region) in %d: %s", season, ", ".join(independents))
     written = write_season(season, assigned)
     logger.info("Wrote %d schools' %d regions from %s", written, season, path.name)
     return written

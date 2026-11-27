@@ -602,7 +602,8 @@ function syncNav() {
     // From the Maps: a picked team's standings (its class and region this season, which can differ from
     // the map's season); else the region last open in Standings in this class, as it was left; else the
     // class. The Maps season (2027 before it's played) isn't carried to Standings or the Bracket.
-    const now = route.teamName && teamSearchSeason === (currentSeason ?? teamSearchSeason) ? teamIndex[route.teamName] : null;
+    const found = route.teamName && teamSearchSeason === (currentSeason ?? teamSearchSeason) ? teamIndex[route.teamName] : null;
+    const now = found?.region != null ? found : null; // an independent has no standings to go to
     const last = lastStandings?.clazz === route.clazz ? lastStandings : null;
     const away = { season: null, week: null };
     standings = now ? { ...away, page: "region", clazz: now.class_, region: now.region, team: route.teamName }
@@ -666,8 +667,8 @@ scrubberHost.addEventListener("click", (e) => {
 let teamSearchSeason = null;
 let teamIndex = {};
 
-/** "Region 6-3A", the place a search result shows. */
-const resultPlace = (t) => `Region ${t.region}-${t.class_}A`;
+/** "Region 6-3A", the place a search result shows ("Independent, 1A" for a team with no region). */
+const resultPlace = (t) => t.region == null ? `Independent${t.class_ ? `, ${t.class_}A` : ""}` : `Region ${t.region}-${t.class_}A`;
 
 /**
  * Make a search box work: *form* holds the input, the results popup (its list
@@ -781,7 +782,7 @@ function teamCombobox(form, teams, onPick, options = {}) {
 // While a map is in full screen, the header's search is the page's (headerMapSearch): a Season map's
 // teams, picked on the map, or on a county's page, the counties. Otherwise it opens a team's standings.
 let mapSearch = null; // { teams(), pick(team), words?, options? } or null
-const headerSearch = teamCombobox(teamSearch?.closest("form"), () => (mapSearch ? mapSearch.teams() : Object.values(teamIndex)), (team, input) => {
+const headerSearch = teamCombobox(teamSearch?.closest("form"), () => (mapSearch ? mapSearch.teams() : Object.values(teamIndex).filter((t) => t.class_ != null)), (team, input) => {
   input.value = "";
   if (mapSearch) {
     if (!mapSearch.options) track("team_search_used", { team: team.school, from: "regions" });
@@ -792,6 +793,11 @@ const headerSearch = teamCombobox(teamSearch?.closest("form"), () => (mapSearch 
   track("team_search_used", { team: team.school });
   // (From the Maps, not their season: the team's standings are this season's.)
   const away = route.page === "regions" || route.page === "counties" ? { season: null, week: null } : {};
+  // An independent has no standings: its class's map, that season, shows where it was.
+  if (team.region == null) {
+    navigate(hrefWith({ page: "regions", clazz: team.class_, region: null, county: null, team: team.school, view: "map", vs: null, vsClass: null, season: teamSearchSeason, week: null }), { scroll: true });
+    return;
+  }
   navigate(hrefWith({ clazz: team.class_, region: team.region, team: team.school, ...away }), { scroll: true });
 }, () => mapSearch?.options ?? {});
 
