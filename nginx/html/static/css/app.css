@@ -1537,7 +1537,8 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .fb-cat input:focus-visible + span { outline: 2px solid var(--link); outline-offset: 2px; }
 .fb-field { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
 .fb-field .muted { font-weight: 400; }
-.fb-form textarea, .fb-form input[type="email"], .fb-form input[type="date"], .fb-score input {
+.fb-form textarea, .fb-form input[type="email"], .fb-form input[type="date"], .fb-score input,
+.fb-form input[type="text"], .fb-form input[type="search"], .fb-form input[type="datetime-local"], .fb-form select, .ms-find input {
   width: 100%; padding: 10px 12px;
   font: inherit; font-size: 16px; font-weight: 400; /* 16px: no iOS zoom on focus */
   color: var(--text-primary);
@@ -1667,25 +1668,15 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .mod-reject:hover { border-color: var(--text-secondary); }
 .mod-decide button:disabled { opacity: 0.6; cursor: progress; }
 .mod-message-card { display: grid; gap: 12px; justify-items: start; padding-block: 24px; }
-/* The queue and the Schools tab. */
-.mod-tabs { display: flex; gap: 4px; margin: 0 0 20px; border-bottom: 1px solid var(--border); }
-.mod-tabs a { padding: 11px 14px; font-weight: 600; color: var(--text-secondary); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
-.mod-tabs a[aria-current] { color: var(--text-primary); border-color: var(--accent-identity); }
-.mod-tabs a:hover { color: var(--text-primary); }
+/* The queue and the tabs that correct the data: the site's segmented control. */
+.mod-tabs { display: flex; flex-wrap: wrap; }
 /* The Schools tab (moderate-schools.js): a school's look now, past looks, logos, helmets and seasons. */
 .ms-find { display: flex; gap: 8px; margin-bottom: 8px; }
-.ms-find input { flex: 1; min-width: 0; min-height: 44px; padding: 0 12px; font: inherit; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-page); color: var(--text-primary); }
-.ms-status { min-height: 20px; margin: 0 0 12px; font-size: 14px; color: var(--text-secondary); }
-.ms-status.is-bad { color: #B91C1C; }
-.dark .ms-status.is-bad { color: #F87171; }
 .ms-head { display: flex; align-items: center; gap: 12px; margin: 8px 0 4px; }
 .ms-head h2 { margin: 0; font-family: var(--font-display); font-size: 28px; line-height: 1.1; }
 .ms-sub { margin: 0 0 18px; color: var(--text-secondary); font-size: 14px; }
 .ms-sec { margin: 0 0 20px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; }
 .ms-sec h3 { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 6px; font-size: 16px; }
-.ms-sec button, .ms-save button { min-height: 36px; padding: 0 12px; font: inherit; font-size: 14px; font-weight: 600; color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; background: none; cursor: pointer; }
-.ms-sec button:hover { border-color: var(--text-secondary); }
-.ms-sec button:disabled { opacity: 0.6; cursor: progress; }
 .ms-row { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: 8px 12px; align-items: center; padding: 9px 0; box-shadow: inset 0 1px var(--border); font-size: 15px; }
 .ms-row:first-of-type { box-shadow: none; }
 .ms-k { color: var(--text-secondary); font-size: 13px; }
@@ -1700,21 +1691,30 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .ms-when { font-weight: 700; }
 .ms-thumb { width: 40px; height: 40px; object-fit: contain; border-radius: 6px; }
 .ms-thumb--none { display: inline-grid; place-items: center; font-size: 10px; line-height: 1.1; text-align: center; color: var(--text-secondary); border: 1px dashed var(--border); }
-.ms-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; padding-block: 6px; }
+.ms-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; align-items: start; padding-block: 6px; }
 .ms-sec > .ms-form { grid-column: 1 / -1; }
-.ms-field { display: grid; gap: 4px; min-width: 0; font-size: 13px; color: var(--text-secondary); }
-.ms-field input, .ms-field select { min-width: 0; min-height: 40px; padding: 0 10px; font: inherit; font-size: 15px; color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; background: var(--surface-page); }
-.ms-field input[type=file] { padding: 8px 0; border: 0; min-height: 0; }
-.ms-field small { font-size: 12px; }
 .ms-check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .ms-wide, .ms-save { grid-column: 1 / -1; }
 .ms-save { display: flex; flex-wrap: wrap; gap: 8px; }
-.ms-save .ms-primary { background: var(--accent-identity); border-color: var(--accent-identity); color: #FFFFFF; }
-.ms-save .ms-danger { margin-left: auto; color: #B91C1C; }
-.dark .ms-save .ms-danger { color: #F87171; }
+.ms-save .ms-danger { margin-left: auto; color: var(--state-eliminated); }
+.ms-find input { flex: 1; min-width: 0; }
+.ms-form .fb-field small { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+.ms-form input[type="file"] { padding: 6px 0; font: inherit; font-size: 14px; }
+.ms-form .fb-field { min-width: 0; }
+.ms-sec .mod-button { min-height: 36px; padding: 0 12px; }
+.ms-act { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.ms-row--action { grid-template-columns: 7rem minmax(0, 1fr) auto; }
+.ms-row--game { grid-template-columns: 4rem minmax(0, 1fr) auto auto; }
+.ms-score { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ms-table { overflow-x: auto; }
+.ms-table table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ms-table th, .ms-table td { padding: 8px 6px; text-align: left; vertical-align: middle; box-shadow: inset 0 -1px var(--border); }
+.ms-table th { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.ms-table td:nth-child(3) { overflow-wrap: anywhere; }
+.ms-list { margin: 8px 0 0; padding-left: 20px; font-size: 14px; }
 .ms-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .ms-strip span { display: grid; justify-items: center; gap: 2px; padding: 6px 8px; font-size: 12px; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 8px; }
-@media (max-width: 560px) { .ms-form { grid-template-columns: 1fr; } .ms-row { grid-template-columns: 1fr; gap: 2px; } }
+@media (max-width: 560px) { .ms-form { grid-template-columns: 1fr; } .ms-row, .ms-row--action, .ms-row--game { grid-template-columns: 1fr; gap: 2px; } }
 
 /* ------------------------------------------------------------ static page content
    What nginx includes before the app loads (backend/helpers/static_pages.py). */
@@ -2054,7 +2054,8 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 /* Season and Compare: every map page has them, under its title, in the bracket's half switch's style
    (.half-control); here they're links. */
 .maps-views { margin: 16px 0 0; }
-.maps-views__item { display: inline-flex; align-items: center; text-decoration: none; }
+/* (Any of the half switch's items that are links: the map views, /moderate's tabs.) */
+.maps-views__item, a.half-control__item { display: inline-flex; align-items: center; text-decoration: none; }
 
 /* ------------------------------------------------------------- compare (regions.js comparePage) */
 /* Two maps side by side, each with its season and class over it; on a phone, one over the other. */

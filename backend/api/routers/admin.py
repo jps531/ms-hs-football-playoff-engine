@@ -111,6 +111,24 @@ async def list_locations() -> list[LocationModel]:
 # ---------------------------------------------------------------------------
 
 
+@router.get("/venues")
+async def list_venues_for_editing() -> list[dict[str, Any]]:
+    """Every venue, by name, with its stored values (``base``: name, city, home team, coordinates) and
+    its ``overrides`` (home team and coordinates can be overridden), for /moderate's Venues tab."""
+    async with get_conn() as conn:
+        rows = await conn.execute(
+            "SELECT id, name, city, home_team, latitude, longitude, overrides FROM locations ORDER BY lower(name), id"
+        )
+        return [
+            {
+                "id": r[0],
+                "base": {"name": r[1], "city": r[2], "home_team": r[3], "latitude": r[4], "longitude": r[5]},
+                "overrides": r[6] or {},
+            }
+            async for r in rows
+        ]
+
+
 @router.post("/championship-venue", responses={404: {"description": "Not found"}, 409: {"description": "Conflict"}})
 async def assign_championship_venue(
     body: AssignChampionshipVenueRequest,
@@ -530,6 +548,65 @@ async def clear_game_override(school: str, date: date_type, field: str) -> None:
     _log.info("admin: cleared game override school=%s date=%s field=%s", school, date, field)
 
 
+_GAME_COLUMNS = (
+    "points_for",
+    "points_against",
+    "game_status",
+    "round",
+    "region_game",
+    "overtime",
+    "location",
+    "location_id",
+    "kickoff_time",
+)
+
+
+# A game's region-game flag without an override is the region alignment's (games_effective), not the
+# column the schedule pipeline writes (no longer read): the same school class and region that season.
+_GAME_BASE_SQL = {
+    "region_game": """(COALESCE(g.overrides->>'round', g.round) IS NULL AND EXISTS (
+        SELECT 1 FROM school_seasons a JOIN school_seasons b
+          ON b.season = a.season AND b.class = a.class AND b.region = a.region
+        WHERE a.school = g.school AND a.season = g.season AND b.school = g.opponent))""",
+}
+
+
+@router.get("/games", responses=_404)
+async def list_games_for_editing(
+    school: Annotated[str, Query()], season: Annotated[int, Query()]
+) -> list[dict[str, Any]]:
+    """*school*'s games in *season*, by date, from its own rows (where its overrides go): each game's
+    date, opponent, stored values (``base``: its row's, but ``region_game`` the region alignment's),
+    ``overrides``, venue name and the helmet it wore."""
+    async with get_conn() as conn:
+        await require_school_exists(conn, school)
+        rows = await conn.execute(
+            """
+            SELECT g.date, g.opponent, g.overrides, g.helmet_design_id, l.name, """
+            + ", ".join(_GAME_BASE_SQL.get(c, f"g.{c}") for c in _GAME_COLUMNS)
+            + """
+            FROM games g LEFT JOIN locations l ON l.id = g.location_id
+            WHERE g.school = %s AND g.season = %s ORDER BY g.date
+            """,
+            (school, season),
+        )
+        out = []
+        async for r in rows:
+            base = dict(zip(_GAME_COLUMNS, r[5:], strict=True))
+            base["kickoff_time"] = base["kickoff_time"].isoformat() if base["kickoff_time"] else None
+            out.append(
+                {
+                    "date": r[0].isoformat(),
+                    "opponent": r[1],
+                    "overrides": r[2] or {},
+                    "helmet_design_id": r[3],
+                    "venue": r[4],
+                    "base": base,
+                }
+            )
+        return out
+
+
 # ---------------------------------------------------------------------------
 # Game helmet assignment
 # ---------------------------------------------------------------------------
@@ -553,6 +630,19 @@ async def set_game_helmet(school: str, date: date_type, body: SetGameHelmetReque
 # ---------------------------------------------------------------------------
 # School season flags
 # ---------------------------------------------------------------------------
+
+
+@router.get("/school-seasons/{school}", responses=_404)
+async def list_school_seasons(school: str) -> list[dict[str, Any]]:
+    """*school*'s seasons, newest first: each one's class, region (null: an independent) and whether
+    it's playing (``is_active``)."""
+    async with get_conn() as conn:
+        await require_school_exists(conn, school)
+        rows = await conn.execute(
+            "SELECT season, class, region, is_active FROM school_seasons WHERE school = %s ORDER BY season DESC",
+            (school,),
+        )
+        return [{"season": r[0], "class": r[1], "region": r[2], "is_active": r[3]} async for r in rows]
 
 
 @router.patch("/school-seasons/{school}/{season}", responses=_404)

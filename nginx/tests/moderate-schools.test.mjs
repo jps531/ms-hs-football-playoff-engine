@@ -78,7 +78,20 @@ test("the whole school: its look now (an override marked), past looks, logos, he
     seasons: [{ season: 2019, team: team(2019, "Hawks", "#00843D", "#FFC72C") }, { season: 2025, team: team(2025, "Warriors", "#800000", "#FFD700") }] }, null);
   assert.match(html, /Region 6-1A in 2025/);
   assert.match(html, /Warriors <span class="ms-tag ms-tag--override">override<\/span>/);
-  assert.match(html, /Logos <button type="button" data-edit="new-logo">/);
+  assert.match(html, /Logos <button type="button" class="mod-button" data-edit="new-logo">/);
   assert.match(html, /None yet: a plain helmet in its colors/);
   assert.match(html, /2019<\/span>.*2025<\/span>/s);
+});
+
+test("each season's place, and its form: an independent's class and region come from the region file", async () => {
+  const { seasonPlace, seasonsSection } = await import("../html/static/js/moderate-schools.js");
+  assert.equal(seasonPlace({ class: 1, region: 6 }), "Region 6-1A");
+  assert.equal(seasonPlace({ class: 1, region: null }), "1A Independent");
+  const rows = [{ season: 2025, class: 1, region: 6, is_active: true }, { season: 2017, class: 1, region: null, is_active: false }];
+  const html = seasonsSection(rows, null);
+  assert.match(html, /2025<\/span><span>Region 6-1A<\/span>/);
+  assert.match(html, /1A Independent <span class="ms-tag">not playing<\/span>/);
+  assert.match(seasonsSection(rows, "season-2025"), /<select name="class">.*<option value="1" selected>1A/s);
+  assert.match(seasonsSection(rows, "season-2017"), /an independent’s class and region come from the region file/);
+  assert.doesNotMatch(seasonsSection(rows, "season-2017"), /name="region"/);
 });

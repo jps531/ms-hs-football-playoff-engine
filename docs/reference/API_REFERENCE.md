@@ -266,10 +266,13 @@ A new season's playoff bracket format (`playoff_formats` and `playoff_format_slo
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/overrides` | Audit all active manual overrides across schools, locations, and games |
+| GET | `/overrides` | Audit all active manual overrides across schools, locations, games and past looks (`look:<id>:<school>`) |
 | PUT | `/schools/{school}/overrides` | Set one override field on a school. Body: `{ "field": "display_name", "value": "West Jones" }`. Valid fields: `display_name`, `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `latitude`, `longitude` |
 | DELETE | `/schools/{school}/overrides/{field}` | Clear one override field, restoring the pipeline-written value |
 | GET | `/schools` | Every school's name, closed ones too (for /moderate's Schools tab) |
+| GET | `/school-seasons/{school}` | A school's seasons, newest first: `season`, `class`, `region` (null: an independent), `is_active` |
+| GET | `/games?school=&season=` | A school's games in a season, from its own rows (where its overrides go): `date`, `opponent`, stored values (`base`; `region_game` is the region alignment's), `overrides`, `venue`, `helmet_design_id` |
+| GET | `/venues` | Every venue with its stored values (`base`: `name`, `city`, `home_team`, `latitude`, `longitude`) and `overrides` |
 | GET | `/schools/{school}` | A school's stored values (`base`), its `overrides`, and `image_base` (where stored logo and helmet paths are served from) |
 | GET | `/schools/{school}/looks` | A school's past looks (`school_looks`), oldest first: each with its stored values (`base`), `overrides`, `source` (`file` or `moderator`) and `color_variants` |
 | POST | `/schools/{school}/looks` | Add a past look (`source` `moderator`: the looks pipeline leaves it). Body: `first_season`, `last_season` (null: open), `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `approximate`, `note`. 409 if the school has a look starting that season |

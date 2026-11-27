@@ -6,6 +6,7 @@ import { completeSignIn, forgetToken, logoutUrl, signIn, storedToken } from "./a
 import { escapeHtml as esc } from "./format.js";
 import { STATUSES, flagsHtml, flagsSummary, itemHtml, typeFilters } from "./moderation.js";
 import { schoolsTab } from "./moderate-schools.js";
+import { gamesTab, overridesTab, venuesTab } from "./moderate-tabs.js";
 
 const API = "/api/v1";
 const PAGE_SIZE = 50;
@@ -55,40 +56,41 @@ async function upload(path, file) {
 }
 
 // ------------------------------------------------------------ tabs
-// The queue, and the Schools tab (moderate-schools.js): ?tab=schools&school=Shaw opens a school.
+// The queue, and the tabs that correct the data (moderate-schools.js, moderate-tabs.js). The address
+// says which is open, and what it opened: ?tab=schools&school=Shaw, ?tab=games&school=Shaw&season=2025.
 
-let schoolsReady = false;
+const TABS = ["queue", "schools", "games", "venues", "overrides"];
+const started = new Set(["queue"]);
+
+/** Keep *params* (the open tab and what it shows) in the address, the queue's filters with them. */
+function address(tab, params = {}) {
+  const q = new URLSearchParams(location.search);
+  for (const k of ["tab", "school", "season"]) q.delete(k);
+  if (tab !== "queue") q.set("tab", tab);
+  for (const [k, v] of Object.entries(params)) if (v != null) q.set(k, v);
+  history.replaceState(null, "", `/moderate${q.size ? `?${q}` : ""}`);
+}
 
 function showTab(tab, { push = true } = {}) {
-  const schools = tab === "schools";
+  if (!TABS.includes(tab)) tab = "queue";
   for (const a of root.querySelectorAll("[data-tab-link]")) {
     if (a.dataset.tabLink === tab) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   }
-  root.querySelector("[data-tab=queue]").hidden = schools;
-  root.querySelector("[data-tab=schools]").hidden = !schools;
-  if (push) {
-    const q = new URLSearchParams(location.search);
-    if (schools) q.set("tab", "schools");
-    else {
-      q.delete("tab");
-      q.delete("school");
-    }
-    history.replaceState(null, "", `/moderate${q.size ? `?${q}` : ""}`);
-  }
-  if (schools && !schoolsReady) {
-    schoolsReady = true;
-    schoolsTab(root.querySelector("[data-tab=schools]"), {
-      api,
-      upload,
-      start: new URLSearchParams(location.search).get("school"),
-      onSchool: (name) => {
-        const q = new URLSearchParams(location.search);
-        q.set("tab", "schools");
-        q.set("school", name);
-        history.replaceState(null, "", `/moderate?${q}`);
-      },
-    });
+  for (const t of TABS) root.querySelector(`[data-tab=${t}]`).hidden = t !== tab;
+  if (push) address(tab);
+  if (started.has(tab)) return;
+  started.add(tab);
+  const box = root.querySelector(`[data-tab=${tab}]`);
+  const q = new URLSearchParams(location.search);
+  if (tab === "schools") {
+    schoolsTab(box, { api, upload, start: q.get("school"), onSchool: (school) => address("schools", { school }) });
+  } else if (tab === "games") {
+    gamesTab(box, { api, start: { school: q.get("school"), season: q.get("season") }, onOpen: ({ school, season }) => address("games", { school, season }) });
+  } else if (tab === "venues") {
+    venuesTab(box, { api });
+  } else if (tab === "overrides") {
+    overridesTab(box, { api });
   }
 }
 
@@ -148,9 +150,12 @@ function shell() {
       ${docs}
       <button type="button" class="mod-button" data-signout>Sign out</button>
     </div>
-    <nav class="mod-tabs" aria-label="Moderation">
-      <a href="/moderate" data-tab-link="queue" aria-current="page">Queue</a>
-      <a href="/moderate?tab=schools" data-tab-link="schools">Schools</a>
+    <nav class="half-control mod-tabs" aria-label="Moderation">
+      <a class="half-control__item" href="/moderate" data-tab-link="queue" aria-current="page">Queue</a>
+      <a class="half-control__item" href="/moderate?tab=schools" data-tab-link="schools">Schools</a>
+      <a class="half-control__item" href="/moderate?tab=games" data-tab-link="games">Games</a>
+      <a class="half-control__item" href="/moderate?tab=venues" data-tab-link="venues">Venues</a>
+      <a class="half-control__item" href="/moderate?tab=overrides" data-tab-link="overrides">Overrides</a>
     </nav>
     <div data-tab="queue">
     <div data-flags-slot></div>
@@ -168,7 +173,10 @@ function shell() {
     <div class="mod-list" aria-live="polite"></div>
     <div class="mod-more"></div>
     </div>
-    <div data-tab="schools" class="ms" hidden></div>`;
+    <div data-tab="schools" class="ms" hidden></div>
+    <div data-tab="games" class="ms" hidden></div>
+    <div data-tab="venues" class="ms" hidden></div>
+    <div data-tab="overrides" class="ms" hidden></div>`;
 }
 
 /** Redraw both chip rows (keeping focus on the chosen chip) and the tab title's count. */
@@ -378,7 +386,8 @@ async function boot() {
     return;
   }
   shell();
-  if (new URLSearchParams(location.search).get("tab") === "schools") showTab("schools", { push: false });
+  const tab = new URLSearchParams(location.search).get("tab");
+  if (tab) showTab(tab, { push: false });
   await load();
   // Prefect is the owner's alone (the API refuses anyone else), so only the
   // owner sees its link (and the analytics dashboard's) and the feature flags,
