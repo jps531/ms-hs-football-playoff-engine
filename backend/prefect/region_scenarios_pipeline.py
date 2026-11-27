@@ -170,7 +170,7 @@ def fetch_class_regions(season: int) -> dict[int, list[int]]:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT DISTINCT class, region FROM school_seasons WHERE season = %s AND is_active "
-                "AND class = ANY(%s) ORDER BY class, region",
+                "AND class = ANY(%s) AND region IS NOT NULL ORDER BY class, region",
                 (season, list(CLASSES)),
             )
             regions: dict[int, list[int]] = {}

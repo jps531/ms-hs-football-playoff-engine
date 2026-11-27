@@ -109,7 +109,7 @@ async def get_season_structure(season: int) -> SeasonStructureResponse:
             """
             SELECT class, region, COUNT(*) AS team_count
             FROM school_seasons
-            WHERE season = %s
+            WHERE season = %s AND region IS NOT NULL
             GROUP BY class, region
             ORDER BY class, region
             """,

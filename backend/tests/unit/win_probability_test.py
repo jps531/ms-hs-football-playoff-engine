@@ -1373,3 +1373,12 @@ class TestComputeEmbeddedGameProbs:
         )
         assert live_prob == pregame_prob
         assert prob_as_of is not None
+
+
+def test_an_independent_with_no_class_starts_as_1a():
+    """A school with no class that season (an independent that had none) starts from 1A's rating, as a
+    school the site doesn't know does; one with a class starts from its class's."""
+    cfg = EloConfig()
+    schools = {"None": School("None", 2017, None, None), "Indy": School("Indy", 2017, 3, None)}
+    assert _class_prior("None", schools, cfg) == cfg.class_ratings[0] == _class_prior("Unknown", schools, cfg)
+    assert _class_prior("Indy", schools, cfg) == cfg.class_ratings[2]

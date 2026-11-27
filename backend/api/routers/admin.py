@@ -134,7 +134,7 @@ async def assign_championship_venue(
             classes = [body.class_]
         else:
             class_rows = await conn.execute(
-                "SELECT DISTINCT class FROM school_seasons WHERE season = %s ORDER BY class",
+                "SELECT DISTINCT class FROM school_seasons WHERE season = %s AND class IS NOT NULL ORDER BY class",
                 (body.season,),
             )
             classes = [r[0] async for r in class_rows]

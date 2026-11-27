@@ -222,8 +222,8 @@ class School:
 
     school: str
     season: int
-    class_: int
-    region: int
+    class_: int | None  # None: an independent with no class that season
+    region: int | None  # None: an independent (played without a region)
     city: str = ""
     zip: str = ""
     latitude: float = 0.0
