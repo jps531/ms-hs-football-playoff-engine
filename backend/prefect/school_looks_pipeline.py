@@ -4,7 +4,8 @@
 It checks the file against the database's schools before writing anything; a problem stops the flow
 with every problem listed. It then makes ``school_looks`` the file's: each look's row is written (its
 color variants worked out from its hex colors, as ``schools``' are), keeping a row's ``overrides``
-(moderators'), and a row the file no longer has is removed.
+(moderators'), and a row the file no longer has is removed. A look added on /moderate (``source``
+'moderator') is left alone.
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ def write_looks(looks: list[dict]) -> int:  # pragma: no cover - the database
     with get_database_connection() as conn:
         with conn.cursor() as cur:
             keys = [(lk["school"], lk["first_season"] if lk["first_season"] is not None else 0) for lk in looks]
-            cur.execute("SELECT id, school, COALESCE(first_season, 0) FROM school_looks")
+            cur.execute("SELECT id, school, COALESCE(first_season, 0) FROM school_looks WHERE source = 'file'")
             for row_id, school, first in cur.fetchall():
                 if (school, first) not in keys:
                     cur.execute("DELETE FROM school_looks WHERE id = %s", (row_id,))

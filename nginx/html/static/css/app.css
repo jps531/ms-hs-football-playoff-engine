@@ -1667,6 +1667,54 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .mod-reject:hover { border-color: var(--text-secondary); }
 .mod-decide button:disabled { opacity: 0.6; cursor: progress; }
 .mod-message-card { display: grid; gap: 12px; justify-items: start; padding-block: 24px; }
+/* The queue and the Schools tab. */
+.mod-tabs { display: flex; gap: 4px; margin: 0 0 20px; border-bottom: 1px solid var(--border); }
+.mod-tabs a { padding: 11px 14px; font-weight: 600; color: var(--text-secondary); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.mod-tabs a[aria-current] { color: var(--text-primary); border-color: var(--accent-identity); }
+.mod-tabs a:hover { color: var(--text-primary); }
+/* The Schools tab (moderate-schools.js): a school's look now, past looks, logos, helmets and seasons. */
+.ms-find { display: flex; gap: 8px; margin-bottom: 8px; }
+.ms-find input { flex: 1; min-width: 0; min-height: 44px; padding: 0 12px; font: inherit; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-page); color: var(--text-primary); }
+.ms-status { min-height: 20px; margin: 0 0 12px; font-size: 14px; color: var(--text-secondary); }
+.ms-status.is-bad { color: #B91C1C; }
+.dark .ms-status.is-bad { color: #F87171; }
+.ms-head { display: flex; align-items: center; gap: 12px; margin: 8px 0 4px; }
+.ms-head h2 { margin: 0; font-family: var(--font-display); font-size: 28px; line-height: 1.1; }
+.ms-sub { margin: 0 0 18px; color: var(--text-secondary); font-size: 14px; }
+.ms-sec { margin: 0 0 20px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; }
+.ms-sec h3 { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 6px; font-size: 16px; }
+.ms-sec button, .ms-save button { min-height: 36px; padding: 0 12px; font: inherit; font-size: 14px; font-weight: 600; color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; background: none; cursor: pointer; }
+.ms-sec button:hover { border-color: var(--text-secondary); }
+.ms-sec button:disabled { opacity: 0.6; cursor: progress; }
+.ms-row { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: 8px 12px; align-items: center; padding: 9px 0; box-shadow: inset 0 1px var(--border); font-size: 15px; }
+.ms-row:first-of-type { box-shadow: none; }
+.ms-k { color: var(--text-secondary); font-size: 13px; }
+.ms-src { font-size: 13px; color: var(--text-secondary); }
+.ms-hex { font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.ms-swatch { display: inline-block; width: 14px; height: 14px; margin-right: 4px; border-radius: 4px; vertical-align: -2px; border: 1px solid color-mix(in srgb, var(--text-primary) 25%, transparent); }
+.ms-tag { display: inline-block; margin-left: 6px; padding: 0 6px; font-size: 11px; font-weight: 600; line-height: 18px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-secondary); vertical-align: 1px; }
+.ms-tag--override { border-color: transparent; background: color-mix(in srgb, var(--accent-identity) 16%, var(--surface-page)); color: var(--accent-identity); }
+.ms-look { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 10px 0; box-shadow: inset 0 1px var(--border); }
+.ms-look:first-of-type { box-shadow: none; }
+.ms-look--open { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+.ms-when { font-weight: 700; }
+.ms-thumb { width: 40px; height: 40px; object-fit: contain; border-radius: 6px; }
+.ms-thumb--none { display: inline-grid; place-items: center; font-size: 10px; line-height: 1.1; text-align: center; color: var(--text-secondary); border: 1px dashed var(--border); }
+.ms-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; padding-block: 6px; }
+.ms-sec > .ms-form { grid-column: 1 / -1; }
+.ms-field { display: grid; gap: 4px; min-width: 0; font-size: 13px; color: var(--text-secondary); }
+.ms-field input, .ms-field select { min-width: 0; min-height: 40px; padding: 0 10px; font: inherit; font-size: 15px; color: var(--text-primary); border: 1px solid var(--border); border-radius: 8px; background: var(--surface-page); }
+.ms-field input[type=file] { padding: 8px 0; border: 0; min-height: 0; }
+.ms-field small { font-size: 12px; }
+.ms-check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.ms-wide, .ms-save { grid-column: 1 / -1; }
+.ms-save { display: flex; flex-wrap: wrap; gap: 8px; }
+.ms-save .ms-primary { background: var(--accent-identity); border-color: var(--accent-identity); color: #FFFFFF; }
+.ms-save .ms-danger { margin-left: auto; color: #B91C1C; }
+.dark .ms-save .ms-danger { color: #F87171; }
+.ms-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.ms-strip span { display: grid; justify-items: center; gap: 2px; padding: 6px 8px; font-size: 12px; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 8px; }
+@media (max-width: 560px) { .ms-form { grid-template-columns: 1fr; } .ms-row { grid-template-columns: 1fr; gap: 2px; } }
 
 /* ------------------------------------------------------------ static page content
    What nginx includes before the app loads (backend/helpers/static_pages.py). */

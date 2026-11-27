@@ -5,6 +5,7 @@ import { clientConfig } from "./config.js";
 import { completeSignIn, forgetToken, logoutUrl, signIn, storedToken } from "./auth.js";
 import { escapeHtml as esc } from "./format.js";
 import { STATUSES, flagsHtml, flagsSummary, itemHtml, typeFilters } from "./moderation.js";
+import { schoolsTab } from "./moderate-schools.js";
 
 const API = "/api/v1";
 const PAGE_SIZE = 50;
@@ -38,6 +39,57 @@ async function api(path, { method = "GET", body } = {}) {
     throw new SignedOut("Your sign-in has expired. Please sign in again.");
   }
   return res;
+}
+
+/** Upload *file* (multipart, as the images endpoints take it) to *path*. */
+async function upload(path, file) {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(API + path, { method: "POST", headers: { Authorization: `Bearer ${state.token}` }, body });
+  if (res.status === 401) {
+    forgetToken(store);
+    state.token = null;
+    throw new SignedOut("Your sign-in has expired. Please sign in again.");
+  }
+  return res;
+}
+
+// ------------------------------------------------------------ tabs
+// The queue, and the Schools tab (moderate-schools.js): ?tab=schools&school=Shaw opens a school.
+
+let schoolsReady = false;
+
+function showTab(tab, { push = true } = {}) {
+  const schools = tab === "schools";
+  for (const a of root.querySelectorAll("[data-tab-link]")) {
+    if (a.dataset.tabLink === tab) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  }
+  root.querySelector("[data-tab=queue]").hidden = schools;
+  root.querySelector("[data-tab=schools]").hidden = !schools;
+  if (push) {
+    const q = new URLSearchParams(location.search);
+    if (schools) q.set("tab", "schools");
+    else {
+      q.delete("tab");
+      q.delete("school");
+    }
+    history.replaceState(null, "", `/moderate${q.size ? `?${q}` : ""}`);
+  }
+  if (schools && !schoolsReady) {
+    schoolsReady = true;
+    schoolsTab(root.querySelector("[data-tab=schools]"), {
+      api,
+      upload,
+      start: new URLSearchParams(location.search).get("school"),
+      onSchool: (name) => {
+        const q = new URLSearchParams(location.search);
+        q.set("tab", "schools");
+        q.set("school", name);
+        history.replaceState(null, "", `/moderate?${q}`);
+      },
+    });
+  }
 }
 
 function readFilters() {
@@ -96,6 +148,11 @@ function shell() {
       ${docs}
       <button type="button" class="mod-button" data-signout>Sign out</button>
     </div>
+    <nav class="mod-tabs" aria-label="Moderation">
+      <a href="/moderate" data-tab-link="queue" aria-current="page">Queue</a>
+      <a href="/moderate?tab=schools" data-tab-link="schools">Schools</a>
+    </nav>
+    <div data-tab="queue">
     <div data-flags-slot></div>
     <div class="mod-filters">
       <fieldset class="mod-filter">
@@ -109,7 +166,9 @@ function shell() {
       </fieldset>
     </div>
     <div class="mod-list" aria-live="polite"></div>
-    <div class="mod-more"></div>`;
+    <div class="mod-more"></div>
+    </div>
+    <div data-tab="schools" class="ms" hidden></div>`;
 }
 
 /** Redraw both chip rows (keeping focus on the chosen chip) and the tab title's count. */
@@ -258,6 +317,12 @@ function signOut() {
 }
 
 root.addEventListener("click", (e) => {
+  const tab = e.target.closest("[data-tab-link]");
+  if (tab) {
+    e.preventDefault();
+    showTab(tab.dataset.tabLink);
+    return;
+  }
   if (e.target.closest("[data-signin]")) {
     store.setItem(RETURN_KEY, location.search);
     signIn(state.cfg, redirectUri, store);
@@ -313,6 +378,7 @@ async function boot() {
     return;
   }
   shell();
+  if (new URLSearchParams(location.search).get("tab") === "schools") showTab("schools", { push: false });
   await load();
   // Prefect is the owner's alone (the API refuses anyone else), so only the
   // owner sees its link (and the analytics dashboard's) and the feature flags,

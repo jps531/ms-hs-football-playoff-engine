@@ -5,6 +5,20 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.47.0
+
+A Schools tab on /moderate, beside the queue: find any school (closed ones too) and correct its look
+without the API.
+
+- **Its look now:** name shown, mascot, colors and campus, each marked when it's an override; a
+  value set back to the stored one clears its override.
+- **Past looks:** each look's seasons, mascot and colors. Editing one keeps the looks file's values
+  and stores the changes as overrides (with a reset); a look can also be added here, and the looks
+  pipeline leaves it alone.
+- **Logos and helmets:** add one, set its seasons, primary flag and details, upload its images, or
+  delete it.
+- **How it looks each season:** the school's helmet as the site draws it, season by season.
+
 ## 1.46.0
 
 A school's look by season: a past season shows the mascot, colors and logo the school had then.

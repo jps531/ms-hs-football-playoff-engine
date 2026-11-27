@@ -176,6 +176,41 @@ class SetSchoolOverrideRequest(BaseModel):
     value: str
 
 
+SchoolLookOverrideField = Literal[
+    "first_season",
+    "last_season",
+    "mascot",
+    "primary_color",
+    "secondary_color",
+    "primary_color_hex",
+    "secondary_color_hex",
+    "approximate",
+]
+
+
+class SetSchoolLookOverrideRequest(BaseModel):
+    """Override one field of a past look. Seasons are a year, or blank (as far back as known, or still
+    in use); ``approximate`` is "true" or "false"; a hex color is #RRGGBB (a secondary may be several,
+    comma-joined)."""
+
+    field: SchoolLookOverrideField
+    value: str = Field(max_length=200)
+
+
+class CreateSchoolLookRequest(BaseModel):
+    """A past look added on /moderate (the looks file's pipeline leaves it alone)."""
+
+    first_season: int | None = Field(default=None, ge=1900, le=2100)
+    last_season: int | None = Field(default=None, ge=1900, le=2100)
+    mascot: str | None = Field(default=None, max_length=80)
+    primary_color: str | None = Field(default=None, max_length=60)
+    secondary_color: str | None = Field(default=None, max_length=60)
+    primary_color_hex: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    secondary_color_hex: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}(\s*,\s*#[0-9A-Fa-f]{6})*$")
+    approximate: bool = False
+    note: str | None = Field(default=None, max_length=500)
+
+
 class BulkRecomputeColorsRequest(BaseModel):
     """Recompute color_variants for a set of schools, or every school if omitted."""
 

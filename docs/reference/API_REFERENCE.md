@@ -269,6 +269,13 @@ A new season's playoff bracket format (`playoff_formats` and `playoff_format_slo
 | GET | `/overrides` | Audit all active manual overrides across schools, locations, and games |
 | PUT | `/schools/{school}/overrides` | Set one override field on a school. Body: `{ "field": "display_name", "value": "West Jones" }`. Valid fields: `display_name`, `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `latitude`, `longitude` |
 | DELETE | `/schools/{school}/overrides/{field}` | Clear one override field, restoring the pipeline-written value |
+| GET | `/schools` | Every school's name, closed ones too (for /moderate's Schools tab) |
+| GET | `/schools/{school}` | A school's stored values (`base`), its `overrides`, and `image_base` (where stored logo and helmet paths are served from) |
+| GET | `/schools/{school}/looks` | A school's past looks (`school_looks`), oldest first: each with its stored values (`base`), `overrides`, `source` (`file` or `moderator`) and `color_variants` |
+| POST | `/schools/{school}/looks` | Add a past look (`source` `moderator`: the looks pipeline leaves it). Body: `first_season`, `last_season` (null: open), `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `approximate`, `note`. 409 if the school has a look starting that season |
+| PUT | `/looks/{id}/overrides` | Override one field of a past look. Body: `{ "field": "primary_color_hex", "value": "#006B3F" }`. Fields: `first_season`, `last_season` (a year, or `""`: open), `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `approximate` (`"true"`/`"false"`). A hex color's change works out the look's `color_variants` again |
+| DELETE | `/looks/{id}/overrides/{field}` | Clear one override of a past look |
+| DELETE | `/looks/{id}` | Delete a look added on /moderate (409 for a look from the looks file: remove it there) |
 | POST | `/schools/{school}/recompute-colors` | Recompute one school's `color_variants` (the contrast-safe colors) from its current colors, e.g. after a data repair |
 | POST | `/schools/recompute-colors` | Recompute `color_variants` for the schools in the body's `schools` list, or every school when it's omitted. Returns `recomputed` and `clamp_failed_schools` |
 | PUT | `/games/{school}/{date}/overrides` | Set one override field on a game row (e.g. fix a miscategorized region game or a wrong score, or manually drive a game's live state — see below). Valid fields: `location`, `location_id`, `points_for`, `points_against`, `region_game`, `round`, `kickoff_time`, `game_status`, `game_quarter`, `game_clock`, `overtime`, `ot_period_start_score_for`, `ot_period_start_score_against`, `ot_next_possession` |
