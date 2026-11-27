@@ -1,12 +1,15 @@
 """Admin endpoints for season setup and data maintenance."""
 
 import logging
+import os
+import re
 from datetime import date as date_type
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from psycopg import sql
 from psycopg.errors import UniqueViolation
+from psycopg.types.json import Json
 
 from backend.api.auth import require_moderator
 from backend.api.db import get_conn
@@ -15,6 +18,7 @@ from backend.api.models.requests import (
     BulkRecomputeColorsRequest,
     CreateHelmetDesignRequest,
     CreateLocationRequest,
+    CreateSchoolLookRequest,
     CreateTeamLogoRequest,
     GameOverrideField,
     LocationOverrideField,
@@ -22,14 +26,17 @@ from backend.api.models.requests import (
     PatchLocationRequest,
     PatchSchoolSeasonRequest,
     PatchTeamLogoRequest,
+    SchoolLookOverrideField,
     SchoolOverrideField,
     SetGameHelmetRequest,
     SetGameOverrideRequest,
     SetLocationOverrideRequest,
+    SetSchoolLookOverrideRequest,
     SetSchoolOverrideRequest,
     UpsertSchoolSeasonRequest,
 )
 from backend.api.models.responses import (
+    AdminSchoolModel,
     AssignChampionshipVenueResult,
     BulkColorRecomputeResult,
     ChampionshipGameRow,
@@ -39,6 +46,7 @@ from backend.api.models.responses import (
     LocationDetailModel,
     LocationModel,
     OverrideAuditRow,
+    SchoolLookModel,
     TeamLogoModel,
 )
 from backend.helpers.api_helpers import (
@@ -47,7 +55,7 @@ from backend.helpers.api_helpers import (
     current_season,
     default_classes_for_season,
 )
-from backend.helpers.color_variants import recompute_color_variants
+from backend.helpers.color_variants import _build_blob, recompute_color_variants
 from backend.helpers.logo_helpers import TEAM_LOGOS_SELECT, build_logo_from_row, sync_logo_cache
 from backend.helpers.query_helpers import (
     build_set_clause,
@@ -70,6 +78,7 @@ _log = logging.getLogger(__name__)
 _SCHOOL_OVERRIDE_FIELDS = frozenset(SchoolOverrideField.__args__)  # type: ignore[attr-defined]
 _GAME_OVERRIDE_FIELDS = frozenset(GameOverrideField.__args__)  # type: ignore[attr-defined]
 _LOCATION_OVERRIDE_FIELDS = frozenset(LocationOverrideField.__args__)  # type: ignore[attr-defined]
+_LOOK_OVERRIDE_FIELDS = frozenset(SchoolLookOverrideField.__args__)  # type: ignore[attr-defined]
 
 # School override fields that feed color_variants — writing one of these must trigger a recompute.
 _COLOR_HEX_OVERRIDE_FIELDS = frozenset({"primary_color_hex", "secondary_color_hex"})
@@ -251,6 +260,209 @@ async def clear_school_override(school: str, field: str) -> None:
         if field in _COLOR_HEX_OVERRIDE_FIELDS:
             await recompute_color_variants(conn, school)
     _log.info("admin: cleared school override school=%s field=%s", school, field)
+
+
+_SCHOOL_COLUMNS = (
+    "display_name",
+    "city",
+    "zip",
+    "latitude",
+    "longitude",
+    "mascot",
+    "primary_color",
+    "secondary_color",
+    "primary_color_hex",
+    "secondary_color_hex",
+    "logo_primary",
+    "logo_secondary",
+    "logo_tertiary",
+)
+
+
+@router.get("/schools")
+async def list_schools() -> list[str]:
+    """Every school the site has, by name, closed ones too (for /moderate's Schools tab to find one)."""
+    async with get_conn() as conn:
+        rows = await conn.execute("SELECT school FROM schools ORDER BY lower(school)")
+        return [r[0] async for r in rows]
+
+
+@router.get("/schools/{school}", responses=_404)
+async def get_school_for_editing(school: str) -> AdminSchoolModel:
+    """A school's stored values (the pipelines') and its overrides, for /moderate's Schools tab. The
+    stored ``display_name`` is the school's name (it has none of its own)."""
+    async with get_conn() as conn:
+        row = await (
+            await conn.execute(
+                "SELECT school, city, zip, latitude, longitude, mascot, primary_color, secondary_color,"
+                " primary_color_hex, secondary_color_hex, logo_primary, logo_secondary, logo_tertiary, overrides"
+                " FROM schools WHERE school = %s",
+                (school,),
+            )
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"School '{school}' not found")
+    base = dict(zip(_SCHOOL_COLUMNS, (row[0], *row[1:13]), strict=True))
+    image_base = os.environ.get("CLOUDINARY_BASE_URL", "").rstrip("/")
+    return AdminSchoolModel(school=row[0], base=base, overrides=row[13] or {}, image_base=image_base)
+
+
+# ---------------------------------------------------------------------------
+# A school's past looks (school_looks)
+# ---------------------------------------------------------------------------
+
+_LOOK_COLUMNS = (
+    "first_season",
+    "last_season",
+    "mascot",
+    "primary_color",
+    "secondary_color",
+    "primary_color_hex",
+    "secondary_color_hex",
+    "approximate",
+)
+_LOOK_SELECT = (
+    "SELECT id, school, source, note, overrides, color_variants, " + ", ".join(_LOOK_COLUMNS) + " FROM school_looks"
+)
+
+
+def _look_model(row) -> SchoolLookModel:
+    """A school_looks row (``_LOOK_SELECT``) as the API gives it."""
+    return SchoolLookModel(
+        id=row[0],
+        school=row[1],
+        source=row[2],
+        note=row[3],
+        overrides=row[4] or {},
+        color_variants=row[5],
+        base=dict(zip(_LOOK_COLUMNS, row[6:], strict=True)),
+    )
+
+
+async def _look_or_404(conn, look_id: int) -> SchoolLookModel:
+    """The look *look_id*, or HTTP 404."""
+    row = await (await conn.execute(_LOOK_SELECT + " WHERE id = %s", (look_id,))).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Look {look_id} not found")
+    return _look_model(row)
+
+
+async def _recompute_look_colors(conn, look_id: int) -> None:
+    """Work out a look's color variants again from its colors with overrides."""
+    row = await (
+        await conn.execute(
+            "SELECT school, primary_color_hex, secondary_color_hex FROM school_looks_effective WHERE id = %s",
+            (look_id,),
+        )
+    ).fetchone()
+    variants = _build_blob(row[1], row[2], row[0])
+    await conn.execute("UPDATE school_looks SET color_variants = %s WHERE id = %s", (Json(variants), look_id))
+
+
+def _check_look_override(field: str, value: str) -> None:
+    """HTTP 422 unless *value* suits *field*: a year or blank for a season, true or false for
+    approximate, #RRGGBB (comma-joined for a secondary) for a hex color."""
+    if field in ("first_season", "last_season"):
+        ok = value == "" or (value.isdigit() and 1900 <= int(value) <= 2100)
+    elif field == "approximate":
+        ok = value in ("true", "false")
+    elif field in _COLOR_HEX_OVERRIDE_FIELDS:
+        parts = [p.strip() for p in value.split(",")] if field == "secondary_color_hex" else [value]
+        ok = all(re.fullmatch(r"#[0-9A-Fa-f]{6}", p) for p in parts)
+    else:
+        ok = bool(value.strip())
+    if not ok:
+        raise HTTPException(status_code=422, detail=f"{value!r} isn't a value for {field}")
+
+
+@router.get("/schools/{school}/looks", responses=_404)
+async def list_school_looks(school: str) -> list[SchoolLookModel]:
+    """A school's past looks, oldest first, each with its stored values and overrides."""
+    async with get_conn() as conn:
+        await require_school_exists(conn, school)
+        rows = await conn.execute(_LOOK_SELECT + " WHERE school = %s ORDER BY first_season NULLS FIRST", (school,))
+        return [_look_model(r) async for r in rows]
+
+
+@router.post("/schools/{school}/looks", status_code=201, responses=_404)
+async def create_school_look(school: str, body: CreateSchoolLookRequest) -> SchoolLookModel:
+    """Add a past look on /moderate (``source`` "moderator": the looks file's pipeline leaves it).
+    409 if the school has a look starting the same season."""
+    if body.first_season is not None and body.last_season is not None and body.first_season > body.last_season:
+        raise HTTPException(status_code=422, detail="The look ends before it starts")
+    variants = _build_blob(body.primary_color_hex, body.secondary_color_hex, school)
+    async with get_conn() as conn:
+        await require_school_exists(conn, school)
+        try:
+            row = await (
+                await conn.execute(
+                    """
+                    INSERT INTO school_looks (school, first_season, last_season, mascot, primary_color,
+                      secondary_color, primary_color_hex, secondary_color_hex, color_variants, approximate, note, source)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'moderator') RETURNING id
+                    """,
+                    (
+                        school,
+                        body.first_season,
+                        body.last_season,
+                        body.mascot,
+                        body.primary_color,
+                        body.secondary_color,
+                        body.primary_color_hex,
+                        body.secondary_color_hex,
+                        Json(variants),
+                        body.approximate,
+                        body.note,
+                    ),
+                )
+            ).fetchone()
+        except UniqueViolation:
+            raise HTTPException(status_code=409, detail=f"{school} already has a look starting then") from None
+        look = await _look_or_404(conn, row[0])
+    _log.info("admin: added a look school=%s id=%s", school, look.id)
+    return look
+
+
+@router.put("/looks/{look_id}/overrides", responses=_404)
+async def set_school_look_override(look_id: int, body: SetSchoolLookOverrideRequest) -> SchoolLookModel:
+    """Override one field of a past look (wins over the file's value until cleared)."""
+    _check_look_override(body.field, body.value)
+    async with get_conn() as conn:
+        await _look_or_404(conn, look_id)
+        await conn.execute(
+            "UPDATE school_looks SET overrides = overrides || jsonb_build_object(%s::text, %s::text) WHERE id = %s",
+            (body.field, body.value, look_id),
+        )
+        if body.field in _COLOR_HEX_OVERRIDE_FIELDS:
+            await _recompute_look_colors(conn, look_id)
+        look = await _look_or_404(conn, look_id)
+    _log.info("admin: set look override id=%s field=%s", look_id, body.field)
+    return look
+
+
+@router.delete("/looks/{look_id}/overrides/{field}", responses=_404)
+async def clear_school_look_override(look_id: int, field: str) -> SchoolLookModel:
+    """Remove an override from a past look, restoring its stored value."""
+    validate_override_field(field, _LOOK_OVERRIDE_FIELDS)
+    async with get_conn() as conn:
+        await _look_or_404(conn, look_id)
+        await conn.execute("UPDATE school_looks SET overrides = overrides - %s WHERE id = %s", (field, look_id))
+        if field in _COLOR_HEX_OVERRIDE_FIELDS:
+            await _recompute_look_colors(conn, look_id)
+        look = await _look_or_404(conn, look_id)
+    _log.info("admin: cleared look override id=%s field=%s", look_id, field)
+    return look
+
+
+@router.delete("/looks/{look_id}", status_code=204, responses=_404)
+async def delete_school_look(look_id: int) -> None:
+    """Delete a look added on /moderate. A look from the file is removed from the file (409 here)."""
+    async with get_conn() as conn:
+        look = await _look_or_404(conn, look_id)
+        if look.source != "moderator":
+            raise HTTPException(status_code=409, detail="This look is from the looks file: remove it there")
+        await conn.execute("DELETE FROM school_looks WHERE id = %s", (look_id,))
+    _log.info("admin: deleted look id=%s", look_id)
 
 
 @router.post("/schools/{school}/recompute-colors", responses=_404)

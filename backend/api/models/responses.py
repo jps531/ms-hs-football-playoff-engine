@@ -1177,6 +1177,30 @@ class LocationDetailModel(BaseModel):
     longitude: float | None = None
 
 
+class AdminSchoolModel(BaseModel):
+    """A school as /moderate edits it: its stored values (``base``, the pipelines') and its overrides,
+    and where its stored image paths (logos, helmets) are served from (``image_base``)."""
+
+    school: str
+    base: dict[str, Any]
+    overrides: dict[str, Any]
+    image_base: str
+
+
+class SchoolLookModel(BaseModel):
+    """A school's past look: its stored values (``base``: the looks file's, or as added on /moderate),
+    its overrides, where it came from (``source``: "file" or "moderator") and its color variants (from
+    its colors with overrides)."""
+
+    id: int
+    school: str
+    source: str
+    note: str | None
+    base: dict[str, Any]
+    overrides: dict[str, Any]
+    color_variants: dict[str, Any] | None
+
+
 class OverrideAuditRow(BaseModel):
     """One active manual override entry."""
 

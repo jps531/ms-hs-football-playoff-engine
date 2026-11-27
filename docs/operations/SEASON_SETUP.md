@@ -91,6 +91,11 @@ still in use. `approximate` is `yes` when the hex colors are standard shades for
 rather than the school's own. Commit the file, deploy, and run `school-looks-pipeline`, then
 `share-assets`.
 
+To correct a look without a PR, or add one, use **/moderate › Schools**: find the school, then edit
+its look now (overrides), its past looks (overrides of the file's values, or looks added there, which
+the pipeline leaves alone), its logos and its helmets (seasons, images). Its last section shows how
+the site draws the school each season. Run `share-assets` afterwards to redraw the images.
+
 `/teams?season=` then gives each school its look that season, so every page and image of a past
 season shows it. Logos follow `team_logos`' seasons (`year_start`, `year_end`, set on /moderate): a
 season with a past look, or covered by none of the school's logos, has no logo, never one the school

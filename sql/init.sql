@@ -267,6 +267,7 @@ CREATE TABLE IF NOT EXISTS school_looks (
   approximate         BOOLEAN NOT NULL DEFAULT FALSE,
   note                TEXT,
   overrides           JSONB   NOT NULL DEFAULT '{}'::jsonb,
+  source              TEXT    NOT NULL DEFAULT 'file' CHECK (source IN ('file', 'moderator')),
   CONSTRAINT school_looks_span CHECK (first_season IS NULL OR last_season IS NULL OR first_season <= last_season)
 );
 
@@ -275,13 +276,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_school_looks_school_first
 
 CREATE OR REPLACE VIEW school_looks_effective AS
 SELECT
-  id, school, first_season, last_season,
+  id, school,
+  -- (A season override may be blank: as far back as known, or still in use.)
+  CASE WHEN overrides ? 'first_season' THEN NULLIF(overrides->>'first_season', '')::int ELSE first_season END AS first_season,
+  CASE WHEN overrides ? 'last_season'  THEN NULLIF(overrides->>'last_season',  '')::int ELSE last_season  END AS last_season,
   COALESCE(overrides->>'mascot',              mascot)              AS mascot,
   COALESCE(overrides->>'primary_color',       primary_color)       AS primary_color,
   COALESCE(overrides->>'secondary_color',     secondary_color)     AS secondary_color,
   COALESCE(overrides->>'primary_color_hex',   primary_color_hex)   AS primary_color_hex,
   COALESCE(overrides->>'secondary_color_hex', secondary_color_hex) AS secondary_color_hex,
-  color_variants, approximate, note, overrides
+  color_variants,
+  COALESCE((overrides->>'approximate')::boolean, approximate) AS approximate,
+  note, overrides, source
 FROM school_looks;
 
 COMMENT ON TABLE school_looks IS
@@ -289,6 +295,8 @@ COMMENT ON TABLE school_looks IS
   'Loaded from backend/data/school_looks.csv; overrides win, as on schools.';
 COMMENT ON COLUMN school_looks.first_season IS 'The look''s first season; NULL: as far back as known.';
 COMMENT ON COLUMN school_looks.last_season IS 'The look''s last season; NULL: still in use.';
+COMMENT ON COLUMN school_looks.source IS
+  'file: from backend/data/school_looks.csv (the pipeline keeps it the file''s); moderator: added on /moderate (the pipeline leaves it).';
 COMMENT ON COLUMN school_looks.approximate IS 'TRUE when the hex colors are standard shades for the named colors, not the school''s exact ones.';
 
 CREATE OR REPLACE VIEW locations_effective AS
