@@ -338,11 +338,39 @@ SCHOOL_RENAMES: list[tuple[str, str, int]] = [
     ("Leake Central", "Leake", 2026),
 ]
 
+# Schools that changed name, the sources too: (old name, new name, first season under the new name).
+# Like SCHOOL_RENAMES, seasons before keep the old name and the old school is the new one's
+# predecessor, but the sources aren't asked for the old name (source_name_for_season): they use the new
+# one. A school can change name more than once (Shaw, McEvans, then Shaw again): every rename applies in
+# order of its first season. FORMER_SLUGS (routes.js) and regions.js SCHOOL_NAME_CHANGES mirror this.
+SCHOOL_NAME_CHANGES: list[tuple[str, str, int]] = [
+    ("Coahoma AHS", "Coahoma Early College", 2018),
+    # The name changed officially for 2019; the sources kept "Ruleville Central" through 2020.
+    ("Ruleville Central", "Thomas E. Edwards", 2019),
+    ("Shaw", "McEvans", 2020),
+    ("McEvans", "Shaw", 2023),
+]
+
+
+def all_renames() -> list[tuple[str, str, int]]:
+    """Every rename (SCHOOL_RENAMES and SCHOOL_NAME_CHANGES), oldest first."""
+    return sorted([*SCHOOL_RENAMES, *SCHOOL_NAME_CHANGES], key=lambda r: r[2])
+
+
 # A new school that carries on an old one, under its own name in the sources too: (old school, new
 # school, first season of the new one). The new school starts from the old one's Elo rating and,
 # when the regions are loaded, takes its campus (location and home field) if it has none of its own.
 # Unlike a rename, the sources are asked for the new name. FORMER_SLUGS maps the old team links.
 SCHOOL_SUCCESSORS: list[tuple[str, str, int]] = [
+    # Cleveland (4-3A) and East Side (3-3A) consolidated into Cleveland Central (2-5A) for 2017, on
+    # Cleveland's campus.
+    ("Cleveland", "Cleveland Central", 2017),
+    # Bassfield and Prentiss (both 7-2A) consolidated into Jefferson Davis County (8-3A) for 2017, on
+    # Bassfield's campus.
+    ("Bassfield", "Jefferson Davis County", 2017),
+    # Broad Street and J. F. Kennedy (both 2-1A) consolidated into Northside for 2018, on Broad Street's
+    # campus.
+    ("Broad Street", "Northside", 2018),
     # Falkner (2-1A) and Walnut (1-2A) consolidated into North Tippah (2-3A) for 2027, on Walnut's campus.
     ("Walnut", "North Tippah", 2027),
 ]
@@ -351,6 +379,20 @@ SCHOOL_SUCCESSORS: list[tuple[str, str, int]] = [
 # loader requires every school from the season before to be in the new season, renamed, continued, or
 # here. A school that comes back just gets a line in its season's region file again.
 SCHOOL_STOPPED_PLAYING: list[tuple[str, int, str]] = [
+    ("Coldwater", 2015, "Did not field a team in 2016; played again from 2017."),
+    ("Benton County", 2016, "Split into Ashland and Hickory Flat for 2017."),
+    ("East Side", 2016, "Consolidated into Cleveland Central (on Cleveland's campus) for 2017."),
+    ("Prentiss", 2016, "Consolidated into Jefferson Davis County (on Bassfield's campus) for 2017."),
+    ("J. F. Kennedy", 2017, "Consolidated into Northside (on Broad Street's campus) for 2018."),
+    ("Durant", 2017, "Closed; its students went to Holmes County Central for 2018."),
+    ("Montgomery County", 2017, "Closed; its students went to Winona for 2018."),
+    ("New Site", 2017, "Stopped playing football after 2017."),
+    ("Hickory Flat", 2018, "Stopped playing football after 2018 (in MHSAA's 2019-21 regions, but didn't play)."),
+    ("Ray Brooks", 2019, "Closed; its students went to West Bolivar and McEvans for 2020."),
+    ("Coahoma Early College", 2019, "Closed after 2019."),
+    ("Madison St. Joseph", 2020, "Moved to the MAIS after 2020."),
+    ("Coldwater", 2022, "Closed; its students went to Strayhorn and Independence for 2023."),
+    ("Wingfield", 2023, "Closed; its students went to Forest Hill and Jim Hill for 2024."),
     ("Leake County", 2025, "Consolidated into Leake (on Leake Central's campus) for 2026."),
     ("Thrasher", 2025, "Program suspended indefinitely after 2025 (not enough players); not on MHSAA's 2027-29 list."),
     ("Falkner", 2026, "Consolidated into North Tippah (on Walnut's campus) for 2027."),
@@ -363,6 +405,9 @@ SCHOOL_STOPPED_PLAYING: list[tuple[str, int, str]] = [
 # (SCHOOL_STOPPED_PLAYING). The Maps' timeline shows them all for the seasons before (regions.js
 # SCHOOL_CONSOLIDATIONS mirrors this; school_renames_test.py keeps them consistent).
 SCHOOL_CONSOLIDATIONS: list[tuple[str, int, list[str]]] = [
+    ("Cleveland Central", 2017, ["Cleveland", "East Side"]),
+    ("Jefferson Davis County", 2017, ["Bassfield", "Prentiss"]),
+    ("Northside", 2018, ["Broad Street", "J. F. Kennedy"]),
     ("Leake", 2026, ["Leake Central", "Leake County"]),
     ("North Tippah", 2027, ["Walnut", "Falkner"]),
 ]
@@ -372,11 +417,14 @@ def name_in(name: str, season: int, other: int) -> str:
     """*name* (a school's site name in *season*) as the school is called in *other*, a season before or
     after: a renamed school's other name (regions.js nameIn)."""
     out = name
-    for old, new, first in SCHOOL_RENAMES:
-        if other >= first and season < first and out == old:
-            out = new
-        elif other < first and season >= first and out == new:
-            out = old
+    if other > season:  # forward: each rename from season to other, in order
+        for old, new, first in all_renames():
+            if season < first <= other and out == old:
+                out = new
+    elif other < season:  # back: each one undone, newest first
+        for old, new, first in reversed(all_renames()):
+            if other < first <= season and out == new:
+                out = old
     return out
 
 
@@ -394,10 +442,11 @@ def names_in(name: str, season: int, other: int) -> list[str]:
 
 
 def school_name_for_season(name: str, season: int) -> str:
-    """The site's name for a school the sources call *name*, in *season* ("Leake Central" in 2026 is "Leake")."""
-    for old, new, first in SCHOOL_RENAMES:
+    """The site's name for a school the sources call *name*, in *season* ("Leake Central" in 2026 is "Leake"):
+    every rename up to *season*, in order ("Shaw" in 2021 is "McEvans", in 2024 "Shaw")."""
+    for old, new, first in all_renames():
         if name == old and season >= first:
-            return new
+            name = new
     return name
 
 
@@ -418,7 +467,7 @@ def with_predecessor_ratings(prior: dict[str, float], season: int) -> dict[str, 
     where the same program finished.
     """
     out = dict(prior)
-    for old, new, first in [*SCHOOL_RENAMES, *SCHOOL_SUCCESSORS]:
+    for old, new, first in [*all_renames(), *SCHOOL_SUCCESSORS]:
         if first == season and new not in out and old in out:
             out[new] = out[old]
     return out

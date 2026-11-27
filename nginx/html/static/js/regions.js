@@ -283,10 +283,25 @@ export function regionsPage(clazz, base, payload, currentSeason, { controls = ""
 // (backend/helpers/data_helpers.py SCHOOL_RENAMES; school_renames_test.py keeps the two the same).
 export const SCHOOL_RENAMES = [["Leake Central", "Leake", 2026]];
 
+// A school renamed, the sources too (data_helpers.py SCHOOL_NAME_CHANGES; school_renames_test.py keeps
+// the two the same). A school can change name more than once: renames apply in order of first season.
+export const SCHOOL_NAME_CHANGES = [
+  ["Coahoma AHS", "Coahoma Early College", 2018],
+  ["Ruleville Central", "Thomas E. Edwards", 2019],
+  ["Shaw", "McEvans", 2020],
+  ["McEvans", "Shaw", 2023],
+];
+
+/** Every rename, oldest first. */
+const allRenames = () => [...SCHOOL_RENAMES, ...SCHOOL_NAME_CHANGES].sort((a, b) => a[2] - b[2]);
+
 // Schools merged into one: the new school, its first season, and the schools merged into it, the one
 // whose campus it carries first (data_helpers.py SCHOOL_CONSOLIDATIONS; school_renames_test.py keeps
 // the two the same).
 export const SCHOOL_CONSOLIDATIONS = [
+  ["Cleveland Central", 2017, ["Cleveland", "East Side"]],
+  ["Jefferson Davis County", 2017, ["Bassfield", "Prentiss"]],
+  ["Northside", 2018, ["Broad Street", "J. F. Kennedy"]],
   ["Leake", 2026, ["Leake Central", "Leake County"]],
   ["North Tippah", 2027, ["Walnut", "Falkner"]],
 ];
@@ -308,9 +323,10 @@ export function namesIn(name, season, other) {
 /** *name* (a school's name in *season*) as the school is called in *other*, a season before or after. */
 export function nameIn(name, season, other) {
   let out = name;
-  for (const [old, now, first] of SCHOOL_RENAMES) {
-    if (other >= first && season < first && out === old) out = now;
-    else if (other < first && season >= first && out === now) out = old;
+  if (other > season) {
+    for (const [old, now, first] of allRenames()) if (season < first && first <= other && out === old) out = now;
+  } else if (other < season) {
+    for (const [old, now, first] of allRenames().reverse()) if (other < first && first <= season && out === now) out = old;
   }
   return out;
 }

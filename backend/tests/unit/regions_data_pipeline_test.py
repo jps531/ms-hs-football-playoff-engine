@@ -1,6 +1,8 @@
 """A season's regions come from its cycle's checked-in file (backend/data/regions/), checked before
 they're loaded; the draft tool reads MHSAA's article in either layout it has used."""
 
+import re
+
 import pytest
 
 from backend.helpers.region_files import (
@@ -44,6 +46,17 @@ def test_every_file_passes_its_own_checks(path):
         prior_path = cycle_path(season - 1)
         prior = set(assignments_for_season(season - 1, prior_path)) if prior_path.exists() else None
         assert problems(assignments_for_season(season, path), season, known, prior) == [], season
+
+
+def test_the_2015_to_2024_schools_gone_since_are_added_by_their_migration():
+    """The loader adds only names it knows, so every school of a 2015-2024 file that no file since has is
+    in migration 0006, and the migration adds no school those files don't have."""
+    seed = (REGIONS_DIR.parents[2] / "sql" / "migrations" / "0006_historical_schools.sql").read_text(encoding="utf-8")
+    added = set(re.findall(r"^\s*\(\s*'([^']+)'", seed, re.MULTILINE)) | set(re.findall(r"SELECT '([^']+)'", seed))
+    old, current = set(), set()
+    for f in sorted(REGIONS_DIR.glob("*.csv")):
+        (old if int(f.name[:4]) < 2025 else current).update(row["school"] for row in read_cycle(f))
+    assert added == old - current
 
 
 def test_the_2027_cycle_has_north_tippah_and_not_its_old_schools():

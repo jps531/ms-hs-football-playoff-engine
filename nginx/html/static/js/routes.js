@@ -23,7 +23,11 @@ export const CLASSES = [1, 2, 3, 4, 5, 6, 7];
  * its new name in a season where the old name isn't there ("leake-central" in
  * 2026 is Leake, "walnut" in 2027 is North Tippah).
  */
-export const FORMER_SLUGS = { "leake-central": "Leake", "walnut": "North Tippah" };
+export const FORMER_SLUGS = {
+  "bassfield": "Jefferson Davis County", "broad-street": "Northside", "cleveland": "Cleveland Central",
+  "coahoma-ahs": "Coahoma Early College", "leake-central": "Leake", "mcevans": "Shaw",
+  "ruleville-central": "Thomas E. Edwards", "walnut": "North Tippah",
+};
 
 /** "St. Martin" -> "st-martin", "D'Iberville" -> "diberville". */
 export function slugify(name) {

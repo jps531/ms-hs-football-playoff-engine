@@ -115,6 +115,10 @@ Record these in `backend/helpers/data_helpers.py`, next to the region file:
 - **A school goes by a new name while the sources still use the old one**: `SCHOOL_RENAMES`. The
   pipelines file everything under the new name and still ask the sources for the old one; see
   Leake below. Add it to `FORMER_SLUGS` too.
+- **A school went by a new name the sources use too** (a past rename): `SCHOOL_NAME_CHANGES`, (old
+  name, new name, first season). Each name stays a school of its own, as the sources have it, and the
+  Elo rating, team links and the Maps' Timeline carry across. A school can be renamed more than once
+  (Shaw was McEvans for 2020-22). Add it to `FORMER_SLUGS` when the old name is no longer used.
 - **Schools merged into one** (on top of the rename or successor above, and the others' lines in
   `SCHOOL_STOPPED_PLAYING`): `SCHOOL_CONSOLIDATIONS`, (new school, first season, [the schools merged,
   the one whose campus it carries first]), and the same line in `SCHOOL_CONSOLIDATIONS` in
@@ -135,6 +139,18 @@ PUT /api/v1/admin/schools/{school}/overrides   {"field": "secondary_color",  "va
 ```
 
 Valid override fields: `display_name`, `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `latitude`, `longitude`. Overrides always win over pipeline values; clear one with `DELETE /api/v1/admin/schools/{school}/overrides/{field}`.
+
+## 2015-2024: the earlier cycles
+
+The region files go back to 2015 (`2015-17.csv` to `2023-25.csv`), from MHSAA's alignments, checked
+season by season against the region games on AHSFHS. The schools of those seasons that the site
+didn't have (closed, consolidated, or under a former name) come from migration
+`0006_historical_schools.sql`, with the towns, campuses, mascots and colors the site owner gave; the
+hex colors are standard shades of the named colors, not the schools' own. Their consolidations,
+renames and last seasons are in `data_helpers.py` with the rest.
+
+To load them, run `regions-data-pipeline` for each season from 2015 to 2024, in order (each season
+checks the one before), then "Recompute all" colors on /moderate (Overrides) and `share-assets`.
 
 ## 2027: North Tippah (Region 2-3A)
 
