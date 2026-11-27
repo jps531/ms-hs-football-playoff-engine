@@ -12,10 +12,10 @@ Independents on the maps: a school that played a season without a region.
 - **On a class's map:** a dashed "I" dot, with no region shape. Picking one shows where it was the
   season before; it has no region-mates to show.
 - **In the lists:** an Independent group after the last region. An "i" beside its heading (the same
-  as the one beside the odds mode) opens a note: "These
-  teams did not participate in a region in 2017 and 2018; they were therefore ineligible for the
-  playoffs." Each school's line says where it was the season before, as the regions' do, and a
-  school that was an independent then reads, for example, "1A Independent in 2023".
+  as the one beside the odds mode) opens a note: "These teams did not participate in a region in
+  2017 and 2018; they were therefore ineligible for the playoffs." Each school's line says where it
+  was the season before, as the regions' do, and a school that was an independent then reads, for
+  example, "1A Independent in 2023".
 - **Compare, Timeline and the Counties pages** name an independent the same way ("Region 2-1A →
   1A Independent"); on a county's map it's a gray "Ind. 1A" pill.
 - **The images to share** draw it the same way, and a team's own image says why it has no region.
