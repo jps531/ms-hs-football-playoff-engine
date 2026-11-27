@@ -378,10 +378,12 @@ test("an independent's place reads '1A Independent', and its notes say where it 
   assert.equal(regions.teamChange(hickory, 2016), "Region 2-1A in 2016");
 });
 
-test("the lists end with the Independent group, which opens why it has no standings", () => {
+test("the lists end with the Independent group, whose 'i' opens why it has no standings", () => {
   const html = regionsLists(1, INDEPENDENTS, 2026);
-  assert.ok(html.indexOf("Region 1") < html.indexOf("Independent</h2>"));
-  assert.match(html, /<details class="regions-list__about"><summary class="regions-list__head">/);
+  assert.ok(html.indexOf("Region 1") < html.indexOf("Independent<button"));
+  // The provenance line's "i": a button that opens the note under the heading.
+  assert.match(html, /Independent<button type="button" class="info-button" aria-expanded="false" aria-controls="independents-help-1">/);
+  assert.match(html, /<div class="mode-help regions-list__help" id="independents-help-1" hidden><p>/);
   assert.match(html, /did not participate in a region in 2017 and 2018; they were therefore ineligible for the playoffs\./);
   assert.match(html, /Hickory Flat<\/span><span class="regions-list__was">2-1A in 2016/);
   assert.doesNotMatch(html, /Region null/);

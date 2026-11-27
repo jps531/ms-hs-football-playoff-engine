@@ -2143,17 +2143,8 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .map-dot--ind text { fill: var(--text-secondary); }
 .map-dot--ind.is-picked circle:first-child { stroke: var(--text-primary); stroke-width: 3; stroke-dasharray: 5 3; }
 .region-chip--ind { background: var(--surface-page); color: var(--text-secondary); border: 1.5px dashed var(--text-secondary); }
-/* The Independent group's heading opens why it has no standings: the "i" says it can. */
-.regions-list__about summary { list-style: none; cursor: pointer; }
-.regions-list__about summary::-webkit-details-marker { display: none; }
-.regions-list__info {
-  display: inline-grid; place-items: center; width: 24px; height: 24px; flex: none;
-  border: 1.5px solid var(--text-secondary); border-radius: 50%;
-  color: var(--text-secondary); font-size: 13px; font-weight: 700; font-style: italic; font-family: Georgia, serif; line-height: 1;
-}
-.regions-list__about summary:hover .regions-list__info, .regions-list__about[open] .regions-list__info { color: var(--text-primary); border-color: var(--text-primary); }
-.regions-list__about summary:focus-visible { outline: 2px solid var(--accent-identity); outline-offset: 2px; border-radius: 8px; }
-.regions-list__about p { margin: 0 0 8px; color: var(--text-secondary); font-size: 14px; line-height: 20px; }
+/* The Independent group's note (the provenance line's "i" opens it), under its heading. */
+.regions-list__help { margin: 0 0 8px; }
 
 /* ------------------------------------------------------------- counties (regions.js countyPage, countiesPage) */
 .county-note { margin: 4px 0 0; font-size: 13px; line-height: 18px; }

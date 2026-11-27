@@ -1,4 +1,4 @@
-import { breadcrumbs, teamColorStyle, teamMark } from "./components.js";
+import { breadcrumbs, infoButton, teamColorStyle, teamMark } from "./components.js";
 import { escapeHtml as esc } from "./format.js";
 import { slugify } from "./routes.js";
 
@@ -145,8 +145,8 @@ export function regionsLists(clazz, payload, currentSeason, teams = {}) {
 }
 
 /**
- * The Independent group, after the regions: its heading, with its dashed chip and an "i", opens why it
- * has no standings; then its schools, each with where it was the season before.
+ * The Independent group, after the regions: its heading, with its dashed chip and an "i" (the provenance
+ * line's) that opens why it has no standings; then its schools, each with where it was the season before.
  */
 export function independentsSection(clazz, payload, schools, teams = {}) {
   const items = [...schools].sort((a, b) => byName(a.school, b.school)).map((s) => {
@@ -156,11 +156,11 @@ export function independentsSection(clazz, payload, schools, teams = {}) {
       + (note ? `<span class="regions-list__was">${esc(note)}</span>` : "")
       + "</a></li>";
   });
-  return `<section class="regions-list__region regions-list__region--ind"><details class="regions-list__about">`
-    + `<summary class="regions-list__head"><h2 class="regions-list__name">`
-    + `<span class="region-chip region-chip--ind" aria-hidden="true">I</span>Independent</h2>`
-    + `<span class="regions-list__info" title="Why no standings">i<span class="visually-hidden">: why no standings</span>`
-    + `</span></summary><p>${esc(independentsLine(payload.seasons))}</p></details>`
+  const help = `independents-help-${clazz}`;
+  return `<section class="regions-list__region regions-list__region--ind"><div class="regions-list__head">`
+    + `<h2 class="regions-list__name"><span class="region-chip region-chip--ind" aria-hidden="true">I</span>Independent`
+    + `${infoButton(help, "Why independents have no standings")}</h2></div>`
+    + `<div class="mode-help regions-list__help" id="${help}" hidden><p>${esc(independentsLine(payload.seasons))}</p></div>`
     + `<ul>${items.join("")}</ul></section>`;
 }
 

@@ -248,10 +248,21 @@ def regions_lists(clazz: int, payload: dict, current_season: int | None, teams: 
     return "".join(out)
 
 
+def info_button(controls: str, label: str) -> str:
+    """A small "i" button that opens an inline note (components.js ``infoButton``)."""
+    return (
+        f'<button type="button" class="info-button" aria-expanded="false" aria-controls="{_e(controls)}">'
+        '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5">'
+        '<circle cx="8" cy="8" r="6.5"/><path d="M8 7.2v4" stroke-linecap="round"/>'
+        '<circle cx="8" cy="4.9" r=".9" fill="currentColor" stroke="none"/></svg>'
+        f'<span class="visually-hidden">{_e(label)}</span></button>'
+    )
+
+
 def independents_section(clazz: int, payload: dict, schools: list[dict], teams: dict | None = None) -> str:
     """The Independent group, after the regions (``independentsSection``): its heading, with its dashed
-    chip and an "i", opens why it has no standings; then its schools, each with where it was the season
-    before."""
+    chip and an "i" (the provenance line's, ``info_button``) that opens why it has no standings; then its
+    schools, each with where it was the season before."""
     items = []
     for s in sorted(schools, key=lambda s: s["school"].lower()):
         note = team_note(s, payload.get("prior_season"))
@@ -263,15 +274,15 @@ def independents_section(clazz: int, payload: dict, schools: list[dict], teams: 
             + (f'<span class="regions-list__was">{_e(note)}</span>' if note else "")
             + "</a></li>"
         )
+    help_id = f"independents-help-{clazz}"
     return (
-        '<section class="regions-list__region regions-list__region--ind"><details class="regions-list__about">'
-        '<summary class="regions-list__head"><h2 class="regions-list__name">'
-        '<span class="region-chip region-chip--ind" aria-hidden="true">I</span>Independent</h2>'
-        '<span class="regions-list__info" title="Why no standings">i<span class="visually-hidden">: why no standings</span>'
-        f"</span></summary><p>{_e(independents_line(payload['seasons']))}</p></details>"
+        '<section class="regions-list__region regions-list__region--ind"><div class="regions-list__head">'
+        '<h2 class="regions-list__name"><span class="region-chip region-chip--ind" aria-hidden="true">I</span>Independent'
+        f"{info_button(help_id, 'Why independents have no standings')}</h2></div>"
+        f'<div class="mode-help regions-list__help" id="{help_id}" hidden>'
+        f"<p>{_e(independents_line(payload['seasons']))}</p></div>"
         f"<ul>{''.join(items)}</ul></section>"
     )
-
 
 def regions_body(
     clazz: int, payload: dict, current_season: int | None, image_url: str | None, teams: dict | None = None
