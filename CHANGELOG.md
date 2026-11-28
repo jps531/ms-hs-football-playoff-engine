@@ -5,6 +5,23 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.50.0
+
+Clean-ups across the site and /moderate.
+
+- **The odds' name in full:** the line under a page's title, and the bar that follows you down it,
+  now say "Projected odds" and "Toss-up odds", as the images do. On a phone, that line takes less
+  room when it wraps.
+- **Toss-up brackets:** where teams have the same Toss-up chance of reaching a slot, the bracket now
+  shows the one with the better Projected chance, not the better seed or the first by name. The
+  Toss-up numbers don't change, and a team with a better Toss-up chance is still the one shown.
+- **About, on a phone:** once you're reading a section, the bar at the top shows just its name.
+- **/moderate:** the Schools and Games tabs use the site's team search, with each school's helmet as
+  of the last season it played; picking one opens it, and on Games, another season reloads it. On a
+  phone, the overrides list shows each override as a block, its value on a line of its own. Every
+  boxed dropdown (/moderate's forms, the share sheet, the Maps' Compare) is drawn to match the text
+  fields beside it, still the browser's own.
+
 ## 1.49.0
 
 The regions go back to 2015: every season from 2015 to 2024, from MHSAA's alignments, checked against

@@ -48,6 +48,14 @@ from backend.api.models.responses import (
     OverrideAuditRow,
     SchoolLookModel,
     TeamLogoModel,
+    TeamModel,
+)
+from backend.api.routers.meta import (
+    _RESOLVED_HELMET_JOIN,
+    _SEASON_LOOK_COLORS,
+    _SEASON_LOOK_COLUMNS,
+    _SEASON_LOOK_JOIN,
+    _row_to_team_model,
 )
 from backend.helpers.api_helpers import (
     HELMET_DESIGNS_SELECT,
@@ -303,6 +311,34 @@ async def list_schools() -> list[str]:
     async with get_conn() as conn:
         rows = await conn.execute("SELECT school FROM schools ORDER BY lower(school)")
         return [r[0] async for r in rows]
+
+
+@router.get("/school-marks")
+async def list_school_marks() -> list[TeamModel]:
+    """Every school as of the last season it played: its class, region and look then (as GET /teams
+    gives it for that season), closed schools too, for /moderate's search to show each one's helmet. A
+    school with no season played isn't listed."""
+    query = (
+        """
+        SELECT DISTINCT ON (s.school) s.school, s.display_name, ss.season, ss.class, ss.region,
+               s.city, """
+        + _SEASON_LOOK_COLUMNS
+        + """,
+               s.latitude, s.longitude, s.zip, """
+        + _SEASON_LOOK_COLORS
+        + """, h.helmet_image
+        FROM schools_effective s
+        JOIN school_seasons ss ON s.school = ss.school AND ss.is_active
+        """
+        + _RESOLVED_HELMET_JOIN
+        + _SEASON_LOOK_JOIN
+        + """
+        ORDER BY s.school, ss.season DESC
+        """
+    )
+    async with get_conn() as conn:
+        rows = await conn.execute(query)
+        return [_row_to_team_model(r) async for r in rows]
 
 
 @router.get("/schools/{school}", responses=_404)

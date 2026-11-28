@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  LOOK_FIELDS, SCHOOL_FIELDS, effectiveLook, imageUrl, invalid, logoRow, lookRow, overrideChanges, schoolHtml, spanLabel, withOverride,
+  LOOK_FIELDS, SCHOOL_FIELDS, effectiveLook, finderMeta, imageUrl, invalid, logoRow, lookRow, overrideChanges, schoolHtml, spanLabel, withOverride,
 } from "../html/static/js/moderate-schools.js";
 
 const HAWKS = {
@@ -94,4 +94,11 @@ test("each season's place, and its form: an independent's class and region come 
   assert.match(seasonsSection(rows, "season-2025"), /<select name="class">.*<option value="1" selected>1A/s);
   assert.match(seasonsSection(rows, "season-2017"), /an independent’s class and region come from the region file/);
   assert.doesNotMatch(seasonsSection(rows, "season-2017"), /name="region"/);
+});
+
+test("finderMeta: the region in the newest season, else the last season played", () => {
+  assert.equal(finderMeta({ school: "Tupelo", season: 2026, class_: 7, region: 1 }, 2026), "Region 1-7A");
+  assert.equal(finderMeta({ school: "Murrah", season: 2026, class_: 7, region: null }, 2026), "7A Independent");
+  assert.equal(finderMeta({ school: "Bassfield", season: 2016, class_: 2, region: 7 }, 2026), "Last played 2016");
+  assert.equal(finderMeta({ school: "New School" }, 2026), "");
 });

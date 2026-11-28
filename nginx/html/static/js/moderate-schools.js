@@ -17,23 +17,36 @@ export async function json(res) {
 }
 
 /**
+ * A search result's second line: its region if it played the newest season ("Region 2-7A",
+ * "1A Independent"), else the last season it played ("Last played 2016"); "" for a school with none.
+ */
+export function finderMeta(t, newest) {
+  if (t.season == null) return "";
+  if (t.season !== newest) return `Last played ${t.season}`;
+  if (t.region != null) return `Region ${t.region}-${t.class_}A`;
+  return `${t.class_ ? `${t.class_}A ` : ""}Independent`;
+}
+
+/**
  * A tab's school search (the site's search box, combobox.js): every school the site has, closed ones
- * too, each with its helmet and, if it's playing this season, its region. *form* is comboboxForm's
- * markup; *onPick(name)* opens one. Resolves to the names, once they're loaded.
+ * too, each with its helmet as of the last season it played (GET /admin/school-marks) and its
+ * finderMeta line. *form* is comboboxForm's markup; *onPick(name)* opens one. Resolves to the names,
+ * once they're loaded.
  */
 export async function schoolFinder(form, api, onPick) {
   let items = [];
+  let newest = null;
   combobox(form, () => items, (school, input) => {
     input.value = school.school;
     onPick(school.school);
-  }, { one: "school", many: "schools", meta: (t) => (t.region == null ? "" : `Region ${t.region}-${t.class_}A`) });
+  }, { one: "school", many: "schools", meta: (t) => finderMeta(t, newest) });
   const names = await api("/admin/schools").then(json);
-  // The latest season's looks, for the helmets (a school that isn't in it gets its initials).
-  const looks = await api("/seasons").then(json)
-    .then((seasons) => api(`/teams?season=${Math.max(...seasons.map((s) => s.season))}`).then(json))
+  // Helmets and lines are a nicety: without them, a school shows its initials.
+  const marks = await api("/admin/school-marks").then(json)
     .then((rows) => Object.fromEntries(rows.map((t) => [t.school, t])))
     .catch(() => ({}));
-  items = names.map((n) => looks[n] ?? { school: n });
+  newest = Math.max(...Object.values(marks).map((t) => t.season));
+  items = names.map((n) => marks[n] ?? { school: n });
   return names;
 }
 

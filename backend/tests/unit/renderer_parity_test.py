@@ -202,6 +202,19 @@ FINAL = {
     "side_a": {"feeders": [], "occupants": [_champ_occ("Winona", 0.25, 0.22), _champ_occ("Kossuth", 0.25, 0.3)]},
     "side_b": {"feeders": [], "occupants": [_champ_occ("Raleigh", 0.25, 0.4)]},
 }
+
+
+def _occ(team: str, p: float, pw: float) -> dict:
+    """A side's occupant with its Toss-up (*p*) and Projected (*pw*) chances of being there."""
+    return {"team": team, "p_reach": p, "p_reach_weighted": pw}
+
+
+# Toss-up ties for a side: by the Projected chance; within 1e-9 the same chance; with no Projected odds, by name.
+TOSSUP_TIES = [
+    {"feeders": [], "occupants": [_occ("Amory", 0.5, 0.3), _occ("Booneville", 0.5, 0.7)]},
+    {"feeders": [], "occupants": [_occ("Corinth", 0.5, 0.6), _occ("Shannon", 0.5000000001, 0.4)]},
+    {"feeders": [], "occupants": [{"team": "Booneville", "p_reach": 0.25}, {"team": "Amory", "p_reach": 0.25}]},
+]
 FINAL_TIED = {**FINAL, "side_b": {"feeders": [], "occupants": [_champ_occ("Raleigh", 0.25, 0.3)]}}
 
 # (name, Python's answer, the JavaScript call, how to compare: "data" or "words")
@@ -318,6 +331,12 @@ CASES = [
     *[(f"sideLabel {i}", sp.side_label(f), _call("bracket", "sideLabel", f), "data") for i, f in enumerate(FEEDERS)],
     ("occupants", sp.occupants(BRACKET[0]["side_b"], "projected"), _call("bracket", "occupants", BRACKET[0]["side_b"], "projected"), "data"),
     ("matchups", sp.game_matchups(BRACKET[0], "projected"), _call("bracket", "matchups", BRACKET[0], "projected"), "data"),
+    # In Toss-up, a tie goes to the better Projected chance (0.5000000001 is 0.5); without one, by name.
+    *[
+        (f"shownFirst {i}", sp.shown_first(sp.occupants(side, "tossup")),
+         _call("bracket", "shownFirst", _of(_call("bracket", "occupants", side, "tossup"))), "data")
+        for i, side in enumerate(TOSSUP_TIES)
+    ],
     ("layoutResults", sp.layout_results(LAYOUT), _call("bracket", "layoutResults", LAYOUT), "data"),
     ("treeColumns", [[(g["game"]["id"], g["feeders"]) for g in c["games"]] for c in sp.tree_columns(BRACKET)], _tree(BRACKET), "columns"),
     ("roundPicks", sp.round_picks(sp.tree_columns(_REGION_6)[0], "projected", {}),

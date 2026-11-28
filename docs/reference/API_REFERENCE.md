@@ -270,6 +270,7 @@ A new season's playoff bracket format (`playoff_formats` and `playoff_format_slo
 | PUT | `/schools/{school}/overrides` | Set one override field on a school. Body: `{ "field": "display_name", "value": "West Jones" }`. Valid fields: `display_name`, `mascot`, `primary_color`, `secondary_color`, `primary_color_hex`, `secondary_color_hex`, `latitude`, `longitude` |
 | DELETE | `/schools/{school}/overrides/{field}` | Clear one override field, restoring the pipeline-written value |
 | GET | `/schools` | Every school's name, closed ones too (for /moderate's Schools tab) |
+| GET | `/school-marks` | Every school as of the last season it played, closed ones too: its `season`, class, region and look then, as `GET /teams` gives it for that season (for /moderate's search to show each school's helmet). A school that never played a season isn't listed |
 | GET | `/school-seasons/{school}` | A school's seasons, newest first: `season`, `class`, `region` (null: an independent), `is_active` |
 | GET | `/games?school=&season=` | A school's games in a season, from its own rows (where its overrides go): `date`, `opponent`, stored values (`base`; `region_game` is the region alignment's), `overrides`, `venue`, `helmet_design_id` |
 | GET | `/venues` | Every venue with its stored values (`base`: `name`, `city`, `home_team`, `latitude`, `longitude`) and `overrides` |
