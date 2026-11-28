@@ -5,6 +5,15 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.50.1
+
+A fix for playoff games AHSFHS lists before they're played. AHSFHS writes the round after the
+opponent ("Brandon Semi-finals Playoffs"), and the schedule pull took the round as part of the
+opponent's name, so tonight's semifinals had no opponent the bracket knew and no round. That kept a
+reported score from going on its game ("… already has another game on 2026-11-27"), and the score
+form from starting on the round's date. The pull now reads the opponent and the round apart (the
+Championship Game too), and its next run puts each of those games right.
+
 ## 1.50.0
 
 Clean-ups across the site and /moderate.

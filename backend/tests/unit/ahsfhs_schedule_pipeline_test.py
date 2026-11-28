@@ -306,6 +306,21 @@ def test_a_game_not_yet_played_has_no_score_or_result() -> None:
     assert (game.final, game.overtime) == (False, 0) and not game.game_status
 
 
+def test_an_unplayed_playoff_games_round_isnt_part_of_its_opponent() -> None:
+    """Before it's played, a game has no score between its opponent and its round, and the round's
+    words ("Semi-finals Playoffs", "Championship Game") aren't the opponent's name. (Names stay as
+    AHSFHS writes them here: the site's spelling comes from the database.)"""
+    semi = _one("Fri., Nov. 27 vs. BRANDON Semi-finals Playoffs")
+    assert (semi.opponent, semi.round, semi.location, semi.final) == ("BRANDON", "Semifinals", "home", False)
+    final = _one("Sat., Dec. 5 WEST JONES Championship Game")
+    assert (final.opponent, final.round, final.location) == ("WEST JONES", "Championship Game", "neutral")
+    first = _one("Fri., Nov. 13 @ PEARL 1st Round Playoffs")
+    assert (first.opponent, first.round) == ("PEARL", "First Round")
+    text = _schedule_text("Fri., Nov. 20 vs. BILOXI 35 7 W 3rd Round Playoffs Fri., Nov. 27 @ OAK GROVE Semi-finals Playoffs")
+    games = parse_ahsfhs_schedule(text, season=SEASON, school_name="Test School", url="http://x", clazz=3)
+    assert [(g.opponent, g.round) for g in games] == [("BILOXI", "Quarterfinals"), ("OAK GROVE", "Semifinals")]
+
+
 def test_a_star_marks_a_region_game() -> None:
     """AHSFHS stars region games, before or after the score."""
     assert _one("Fri., Oct. 3 vs. WEST JONES* 21 14 W").region_game is True
