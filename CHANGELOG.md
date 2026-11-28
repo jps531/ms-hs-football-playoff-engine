@@ -5,6 +5,19 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.51.0
+
+The championship games' kickoffs, and two corrections to the championship stadiums.
+
+- **Kickoffs:** each class's championship game shows when it starts, under where it's played: in
+  its game's sheet and under the championship game in the bracket ("Sat, Dec 5 · 12:00 PM CT"),
+  for 2025 and 2026 so far. They're set on /moderate's Venues tab, beside each class's venue, and
+  can be set before AHSFHS lists the games. Until it does, a score reported for the championship
+  game starts on its day.
+- **Renasant Stadium:** M.M. Roberts Stadium is listed under its new name, Renasant Stadium.
+- **Vaught-Hemingway Stadium:** its location is corrected (it had M.M. Roberts Stadium's
+  longitude), so distances to it are right.
+
 ## 1.50.2
 
 The projected champion under the championship game, in its game's sheet, sits on the same line as

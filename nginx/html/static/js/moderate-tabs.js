@@ -4,7 +4,7 @@
 // the maintenance jobs. Built from the Schools tab's pieces (moderate-schools.js) and the site's own
 // buttons and fields. The pure pieces are exported for the tests.
 
-import { escapeHtml as esc } from "./format.js";
+import { escapeHtml as esc, kickoffText } from "./format.js";
 import { input, invalid, json, overrideChanges, schoolFinder, withOverride } from "./moderate-schools.js";
 import { comboboxForm } from "./combobox.js";
 
@@ -247,16 +247,18 @@ export function venueForm(venue) {
     + "</form>";
 }
 
-/** The championship venues of *season*: each class with its venue, and a Change. */
+/** The championship games of *season*: each class with its venue and kickoff, and a Change. */
 export function championshipSection(season, seasons, assigned, editing, venues) {
   const rows = [1, 2, 3, 4, 5, 6, 7].map((c) => {
     const a = assigned.find((x) => x.class_ === c);
     if (editing === `champ-${c}`) {
       return `<form class="fb-form ms-form" data-form="champ" data-class="${c}"><p class="ms-when ms-wide">${c}A</p>`
         + select("location", "Venue", venues.map((x) => [x.base.name, x.base.name]), a?.location_name ?? "")
+        + `<label class="fb-field"><span>Kickoff (Central)</span><input type="datetime-local" name="kickoff" value="${esc(centralLocal(a?.kickoff))}"><small>Blank: not known yet</small></label>`
         + `<div class="ms-save"><button class="fb-submit" type="submit">Save</button><button type="button" class="mod-button" data-cancel>Cancel</button></div></form>`;
     }
-    return `<div class="ms-row ms-row--action"><span class="ms-k">${c}A</span><span>${a ? esc(a.location_name) : `<span class="ms-src">Not set</span>`}</span>`
+    const when = a?.kickoff ? ` · ${esc(kickoffText(a.kickoff))}` : "";
+    return `<div class="ms-row ms-row--action"><span class="ms-k">${c}A</span><span>${a ? `${esc(a.location_name)}${when}` : `<span class="ms-src">Not set</span>`}</span>`
       + `<button type="button" class="mod-button" data-edit="champ-${c}">Change</button></div>`;
   }).join("");
   return `<section class="ms-sec"><h3>Championship games <label class="inline-select"><span class="visually-hidden">Season</span>`
@@ -317,7 +319,14 @@ export function venuesTab(root, { api }) {
     setStatus(root, "Saving…");
     try {
       if (form.dataset.form === "champ") {
-        await json(await api("/admin/championship-venue", { method: "POST", body: { season, location: v.location, class: Number(form.dataset.class) } }));
+        const clazz = Number(form.dataset.class);
+        const a = assigned.find((x) => x.class_ === clazz);
+        if (v.location !== (a?.location_name ?? "")) {
+          await json(await api("/admin/championship-venue", { method: "POST", body: { season, location: v.location, class: clazz } }));
+        }
+        if (v.kickoff !== centralLocal(a?.kickoff)) {
+          await json(await api(`/admin/championship-venue/${season}/${clazz}/kickoff`, { method: "PUT", body: { kickoff: v.kickoff || null } }));
+        }
       } else if (form.dataset.form === "new-venue") {
         await json(await api("/admin/locations", { method: "POST", body: { name: v.name, city: v.city || null, home_team: v.home_team || null, latitude: num(v.latitude), longitude: num(v.longitude) } }));
       } else {

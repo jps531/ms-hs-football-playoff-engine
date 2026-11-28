@@ -1251,6 +1251,7 @@ class ChampionshipVenueAssignment(BaseModel):
     class_: int
     location_id: int
     location_name: str
+    kickoff: datetime | None = None  # championship_venues.kickoff
 
 
 class ChampionshipVenueModel(BaseModel):
@@ -1260,6 +1261,9 @@ class ChampionshipVenueModel(BaseModel):
     class_: int
     location: LocationDetailModel
     has_games: bool
+    # When the game starts: a moderator's kickoff_time override on its Championship Game rows, else
+    # championship_venues.kickoff; null when neither is known.
+    kickoff: datetime | None = None
 
 
 # ---------------------------------------------------------------------------

@@ -183,6 +183,17 @@ def _tree(games: list[dict]) -> dict:
 # --------------------------------------------------------------- the pairs
 
 VENUE = {"name": "Davis Wade Stadium", "city": "Starkville, MS"}
+VENUE_KICKOFF = {**VENUE, "kickoff": "2026-12-05T18:00:00Z"}
+# Kickoffs as the API sends them: noon CST on a Saturday, an evening in CDT (a regular-season game,
+# say), a UTC offset written out, midnight's hour, none, and one that isn't a time.
+KICKOFFS = [
+    "2026-12-05T18:00:00Z",
+    "2026-09-04T00:30:00Z",
+    "2025-12-07T01:00:00+00:00",
+    "2025-12-06T06:05:00Z",
+    None,
+    "not a time",
+]
 
 
 def _champ_occ(team: str, p: float, pw: float | None) -> dict:
@@ -373,10 +384,12 @@ CASES = [
       for i, r in enumerate(({"winner": "Raleigh", "loser": "Noxubee County", "winner_score": 12, "loser_score": 6},
                              {"winner": "Raleigh", "loser": "Noxubee County"}))],
     *[(f"venueName {i}", sp.venue_name(v), _call("components", "venueName", v), "data")
-      for i, v in enumerate((VENUE, {"name": "M.M. Roberts Stadium", "city": None}, None))],
+      for i, v in enumerate((VENUE, {"name": "Renasant Stadium", "city": None}, None))],
     ("venueName in a sentence", sp.venue_name(VENUE, " in "), _call("components", "venueName", VENUE, " in "), "data"),
     *[(f"finalNote {i}", sp.final_note(v, c), _call("components", "finalNote", v, c), "html")
-      for i, (v, c) in enumerate(((VENUE, {"team": "Winona", "p": 0.2217}), (VENUE, None), (None, None)))],
+      for i, (v, c) in enumerate(((VENUE, {"team": "Winona", "p": 0.2217}), (VENUE, None), (None, None),
+                                  (VENUE_KICKOFF, {"team": "Winona", "p": 0.2217}), (VENUE_KICKOFF, None)))],
+    *[(f"kickoffText {k}", sp.kickoff_text(k), _call("format", "kickoffText", k), "data") for k in KICKOFFS],
     *[(f"projectedChampion {i}", sp.projected_champion(g, r), _call("bracket", "projectedChampion", g, r), "data")
       for i, (g, r) in enumerate(((FINAL, None), (FINAL, {"winner": "Raleigh"}), (FINAL_TIED, None)))],
     ("championBanner venue", sp.champion_banner(2025, 3, {"winner": "Raleigh", "loser": "Mize", "winner_score": 12, "loser_score": 6}, {}, VENUE),

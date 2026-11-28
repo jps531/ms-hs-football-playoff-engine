@@ -8,7 +8,7 @@
 // Moving between pages pushes history; changing the season, week, odds
 // mode, or picked team replaces it, so Back goes to the previous page.
 
-import { escapeHtml as esc, formatPct, isCertain, recordText, shortDate, gameDate, calculatedSpan } from "./format.js";
+import { escapeHtml as esc, formatPct, isCertain, recordText, shortDate, gameDate, calculatedSpan, kickoffText, centralDay } from "./format.js";
 import {
   oddsCell, provenance, statusBadges, teamMark, teamLabel, scenarioCard, classScrubber, chevronIcon,
   ODDS_MODES, modeLabel, tableMode, infoButton, gameCard, outcomeScenarioCard, whyTies, breadcrumbs,
@@ -1422,7 +1422,8 @@ async function bracketView(ctx) {
   }
   bracketData = {
     games, results: layoutResults(layoutRes?.bracket_layout), teams, seeds, records, mode, focus: ctx.team, clazz, season, date, currentSeason: ctx.currentSeason,
-    venue: venues?.[0]?.location ?? null,
+    // Where the championship game is played, and when it starts (kickoff, when known).
+    venue: venues?.[0]?.location ? { ...venues[0].location, kickoff: venues[0].kickoff ?? null } : null,
     asOf: matchupRes.as_of_date,
     // The images to share are drawn for the newest numbers only (a past season's once, for its end),
     // so the Share button shows only where the page shows those.
@@ -1509,6 +1510,12 @@ function shownChampion(game) {
 function siteName(short = false) {
   const v = bracketData.venue;
   return (short ? v?.name : venueName(v)) || "Neutral site";
+}
+
+/** A neutral-site game's sheet: where it's played, and for the championship game, when it starts (if known). */
+function siteLine(game) {
+  const when = game.id === "final" ? kickoffText(bracketData.venue?.kickoff) : "";
+  return `<p class="bgame__site muted">${esc(siteName())}${when ? `<br>${esc(when)}` : ""}</p>`;
 }
 
 /** A team's seed label once it's locked: "Region 3 #1 Seed". */
@@ -2279,7 +2286,7 @@ function sheetHtml(id) {
         ${bracketSide(game, order[0], result, host)}
         ${bye ? "" : `<div class="bgame__vs" aria-hidden="true"><span>${joiner}</span></div>
         ${bracketSide(game, order[1], result, host)}`}
-        ${host === "neutral" && !bye ? `<p class="bgame__site muted">${esc(siteName())}</p>` : ""}
+        ${host === "neutral" && !bye ? siteLine(game) : ""}
         ${playedReason(game, result, set)}
         ${shownChampion(game) ? championLine(shownChampion(game)) : ""}
       </div>
@@ -2343,11 +2350,13 @@ function onSheetClick(e) {
 
 /**
  * The day a playoff game was scheduled, when that's already past (the score report's date starts on it):
- * its round's day in the season's dates ("Second Round" -> "second_round"), or null.
+ * its round's day in the season's dates ("Second Round" -> "second_round"), or for the championship
+ * game before the schedule has it, its kickoff's day; else null.
  */
 function scheduledDay(game) {
   const key = game.round.toLowerCase().replace(/ /g, "_");
-  const day = roundDays.get(`${bracketData.season}:${bracketData.clazz}`)?.[key] ?? null;
+  const day = roundDays.get(`${bracketData.season}:${bracketData.clazz}`)?.[key]
+    ?? (game.id === "final" ? centralDay(bracketData.venue?.kickoff) : null);
   return day && day <= today() ? day : null;
 }
 

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   formatPct, oddsBucket, initials, marginText, joinNames, recordText, contrastRatio, clampToSurface,
-  teamUiColors, inkFor, escapeHtml, calculatedSpan, EPS, isCertain, isImpossible,
+  teamUiColors, inkFor, escapeHtml, calculatedSpan, EPS, isCertain, isImpossible, kickoffText, centralDay,
 } from "../html/static/js/format.js";
 
 test("0% and 100% are reserved for certainty", () => {
@@ -124,4 +124,18 @@ test("a calculation span reads as one time, a span within a day, or a span acros
     calculatedSpan("2026-10-31T14:00:00Z", "2026-11-07T15:00:00Z"),
     "between Sat, Oct 31 at 9:00 AM CDT and Sat, Nov 7 at 9:00 AM CST",
   );
+});
+
+test("kickoffText: when a game starts, in Central time", () => {
+  assert.equal(kickoffText("2026-12-05T18:00:00Z"), "Sat, Dec 5 · 12:00 PM CT"); // CST
+  assert.equal(kickoffText("2026-09-04T00:30:00Z"), "Thu, Sep 3 · 7:30 PM CT"); // CDT, the day before in UTC
+  assert.equal(kickoffText(null), "");
+  assert.equal(kickoffText("not a time"), "");
+});
+
+test("centralDay: the day a moment falls on in Mississippi", () => {
+  assert.equal(centralDay("2026-12-05T18:00:00Z"), "2026-12-05");
+  assert.equal(centralDay("2026-12-05T03:00:00Z"), "2026-12-04"); // 9 PM the night before, in Central
+  assert.equal(centralDay(null), null);
+  assert.equal(centralDay("not a time"), null);
 });

@@ -746,10 +746,12 @@ def _bracket_preview_html(fetch: Fetch, season: int, featured: dict, class_stand
 
 
 def _venue(fetch: Fetch, season: int, clazz: int) -> dict | None:
-    """Where the class's championship game is played that season (a ``/championships`` location), or
-    None when none is on record."""
+    """Where the class's championship game is played that season (a ``/championships`` location, with
+    its ``kickoff`` when known), or None when none is on record."""
     rows = fetch(f"/championships?season={season}&class={clazz}") or []
-    return rows[0].get("location") if rows else None
+    if not rows or not rows[0].get("location"):
+        return None
+    return {**rows[0]["location"], "kickoff": rows[0].get("kickoff")}
 
 
 def _write_bracket_assets(

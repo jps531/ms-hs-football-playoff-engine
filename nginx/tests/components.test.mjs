@@ -293,12 +293,15 @@ test("championBanner: the trophy, the champion and the championship game", () =>
 test("venueName, finalNote and the banner's venue: where the championship game is played", () => {
   const venue = { name: "Davis Wade Stadium", city: "Starkville, MS" };
   assert.equal(venueName(venue), "Davis Wade Stadium • Starkville");
-  assert.equal(venueName({ name: "M.M. Roberts Stadium", city: null }), "M.M. Roberts Stadium");
+  assert.equal(venueName({ name: "Renasant Stadium", city: null }), "Renasant Stadium");
   assert.equal(venueName(null), null);
   const note = finalNote(venue, { team: "Winona", p: 0.22 });
   assert.equal(text(note), "Davis Wade Stadium • Starkville Projected champion: Winona · 22%");
   assert.equal(finalNote(null, null), "");
   assert.equal(text(finalNote(venue, null)), "Davis Wade Stadium • Starkville");
+  // When it starts, under where, once a kickoff is known.
+  const timed = finalNote({ ...venue, kickoff: "2026-12-05T18:00:00Z" }, { team: "Winona", p: 0.22 });
+  assert.equal(text(timed), "Davis Wade Stadium • Starkville Sat, Dec 5 · 12:00 PM CT Projected champion: Winona · 22%");
   const banner = championBanner(2025, 3, { winner: "Raleigh", loser: "Mize", winnerScore: 12, loserScore: 6 }, {}, venue);
   assert.match(banner, /Beat Mize 12–6 in the Championship Game at Davis Wade Stadium in Starkville<\/p>/);
 });
