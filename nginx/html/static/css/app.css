@@ -1306,8 +1306,11 @@ dialog.game-sheet .bteam .odds { margin-left: auto; }
 /* "Projected champion:" with its trophy, then the team and its chance: two lines under the bracket's
    narrow card, one where there's room. */
 .champ-line { font-size: 13px; line-height: 18px; color: var(--text-secondary); }
-.champ-line__label { display: inline-flex; align-items: center; gap: 4px; }
-.champ-line .trophy { flex: none; }
+/* The label's words, not its trophy, set its baseline, so the team after it sits on the same line (an
+   inline-flex box takes its baseline from the first item lined up by baseline: the trophy, centred,
+   isn't one). */
+.champ-line__label { display: inline-flex; align-items: baseline; gap: 4px; }
+.champ-line .trophy { flex: none; align-self: center; }
 .champ-line__team { white-space: nowrap; }
 .champ-line strong { color: var(--text-primary); font-weight: 600; }
 .tfinal .champ-line__label { display: flex; justify-content: center; }

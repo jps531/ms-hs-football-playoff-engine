@@ -18,6 +18,11 @@ The championship games' kickoffs, and two corrections to the championship stadiu
 - **Vaught-Hemingway Stadium:** its location is corrected (it had M.M. Roberts Stadium's
   longitude), so distances to it are right.
 
+## 1.50.2
+
+The projected champion under the championship game, in its game's sheet, sits on the same line as
+"Projected champion:" again; it was set a little lower.
+
 ## 1.50.1
 
 A fix for playoff games AHSFHS lists before they're played. AHSFHS writes the round after the
