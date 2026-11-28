@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  centralLocal, describeOverride, gameChanges, gameForm, gameRow, gameValues, matchup, overridesTable, shortDate, venueRow,
+  centralLocal, championshipSection, describeOverride, gameChanges, gameForm, gameRow, gameValues, matchup, overridesTable, shortDate, venueRow,
 } from "../html/static/js/moderate-tabs.js";
 
 // Shaw at West Bolivar, Oct 9 2025 (its real score); the region game is the region alignment's.
@@ -68,4 +68,16 @@ test("each override says what it's on, opens on its tab, and clears through its 
   assert.equal(describeOverride({ source: "game:Shaw:2025-10-09", key: "ahsfhs_opponent", value: "X" }).clear, null);
   assert.match(overridesTable([{ source: "game:Shaw:2025-10-09", key: "ahsfhs_opponent", value: "X" }], {}), /An opponent correction/);
   assert.match(overridesTable([], {}), /No overrides on file/);
+});
+
+test("championshipSection: each class's venue and kickoff, and the form to change both", () => {
+  const assigned = [{ class_: 1, location_name: "Davis Wade Stadium", kickoff: "2026-12-05T18:00:00Z" }, { class_: 2, location_name: "Davis Wade Stadium", kickoff: null }];
+  const venues = [{ base: { name: "Davis Wade Stadium" } }, { base: { name: "Renasant Stadium" } }];
+  const html = championshipSection(2026, [2026, 2025], assigned, null, venues);
+  assert.match(html, /1A<\/span><span>Davis Wade Stadium · Sat, Dec 5 · 12:00 PM CT<\/span>/);
+  assert.match(html, /2A<\/span><span>Davis Wade Stadium<\/span>/);
+  assert.match(html, /3A<\/span><span><span class="ms-src">Not set<\/span>/);
+  const form = championshipSection(2026, [2026], assigned, "champ-1", venues);
+  assert.match(form, /<input type="datetime-local" name="kickoff" value="2026-12-05T12:00">/);
+  assert.match(form, /<option value="Davis Wade Stadium" selected>/);
 });

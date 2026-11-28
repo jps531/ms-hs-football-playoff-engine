@@ -538,6 +538,9 @@ async def list_championships(
     Each entry's ``has_games`` is true when that season/class's Championship Game has
     been imported into ``games`` (so the UI can link through to the game page);
     pre-import seasons return ``has_games: false`` and render as pure almanac entries.
+    ``kickoff`` is when the game starts, when known: a moderator's ``kickoff_time`` override on
+    its rows, else ``championship_venues.kickoff``. (A row's own ``kickoff_time`` isn't used: AHSFHS
+    gives none, and a row added from a score report holds the time it was added.)
     """
     conditions: list[LiteralString] = []
     params: list = []
@@ -554,7 +557,15 @@ async def list_championships(
                  SELECT 1 FROM games g
                  JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
                  WHERE g.season = cv.season AND ss.class = cv.class AND g.round = 'Championship Game'
-               ) AS has_games
+               ) AS has_games,
+               COALESCE(
+                 (SELECT (g.overrides->>'kickoff_time')::timestamptz FROM games g
+                  JOIN school_seasons ss ON ss.school = g.school AND ss.season = g.season
+                  WHERE g.season = cv.season AND ss.class = cv.class AND g.round = 'Championship Game'
+                    AND g.overrides ? 'kickoff_time'
+                  LIMIT 1),
+                 cv.kickoff
+               ) AS kickoff
         FROM championship_venues cv
         JOIN locations l ON l.id = cv.location_id
     """
@@ -570,6 +581,7 @@ async def list_championships(
                 class_=r[1],
                 location=LocationDetailModel(id=r[2], name=r[3], city=r[4], home_team=r[5], latitude=r[6], longitude=r[7]),
                 has_games=r[8],
+                kickoff=r[9],
             )
             async for r in rows
         ]

@@ -21,6 +21,7 @@ import re
 from collections.abc import Iterable
 from datetime import date, datetime
 from xml.sax.saxutils import escape as xml_escape
+from zoneinfo import ZoneInfo
 
 from backend.helpers.certainty import CERTAIN_EPS
 from backend.helpers.color_contrast import contrast_ratio
@@ -51,6 +52,8 @@ ODDS_BY_KEY = {key: (label, full) for key, label, full in ODDS_COLUMNS}
 MID_COLUMNS = {"p2", "p3", "p4"}
 # Under the region table on narrow screens, where those columns are gone (app.js's ``TABLE_HINT``).
 TABLE_HINT = "Select a team to see its odds of every seed."
+
+CENTRAL = ZoneInfo("America/Chicago")  # kickoffs are shown in Mississippi's time
 
 
 def _odds_head(key: str, extra: str = "") -> str:
@@ -252,11 +255,28 @@ def champion_line(champ: dict) -> str:
     )
 
 
+def kickoff_text(iso: str | None) -> str:
+    """When a game starts, in Central time (format.js's ``kickoffText``): "Sat, Dec 5 · 12:00 PM CT";
+    "" for a missing or unreadable time."""
+    try:
+        t = datetime.fromisoformat(str(iso)).astimezone(CENTRAL) if iso else None
+    except ValueError:
+        t = None
+    if t is None:
+        return ""
+    return f"{t:%a}, {t:%b} {t.day} · {t.hour % 12 or 12}:{t:%M} {t:%p} CT"
+
+
 def final_note(venue: dict | None, champ: dict | None) -> str:
-    """Under the championship game's card: where it's played and the projected champion
-    (components.js's ``finalNote``). "" when there's neither."""
+    """Under the championship game's card: where it's played, when (*venue*'s ``kickoff``, when
+    known) and the projected champion (components.js's ``finalNote``). "" when there's none of them."""
     where = venue_name(venue)
-    parts = (f'<p class="tfinal__venue">{_e(where)}</p>' if where else "") + (champion_line(champ) if champ else "")
+    when = kickoff_text((venue or {}).get("kickoff"))
+    parts = (
+        (f'<p class="tfinal__venue">{_e(where)}</p>' if where else "")
+        + (f'<p class="tfinal__venue">{_e(when)}</p>' if when else "")
+        + (champion_line(champ) if champ else "")
+    )
     return f'<div class="tfinal">{parts}</div>' if parts else ""
 
 

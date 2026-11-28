@@ -155,13 +155,23 @@ class AssignChampionshipVenueRequest(BaseModel):
     location: str = Field(
         description=(
             "Venue as the admin would pick/type it — matched case-insensitively and exactly "
-            "against either locations.name (e.g. 'M.M. Roberts Stadium') or locations.home_team "
+            "against either locations.name (e.g. 'Renasant Stadium') or locations.home_team "
             "(e.g. 'Southern Miss'). Must resolve to exactly one location."
         )
     )
     class_: int | None = Field(default=None, alias="class", ge=1, le=7)
 
     model_config = {"populate_by_name": True}
+
+
+class SetChampionshipKickoffRequest(BaseModel):
+    """When a season/class's championship game starts, in Central time, or null to clear it."""
+
+    kickoff: str | None = Field(
+        default=None,
+        pattern=r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}$",
+        description="Central (Mississippi) wall-clock time, 'YYYY-MM-DDTHH:MM' (e.g. '2026-12-05T12:00'); null clears it.",
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -27,6 +27,8 @@ After the championship games are ingested by the AHSFHS pipeline, assign the ven
 
 This upserts `championship_venues` (the source of truth, usable even before that season's Championship Game rows exist) and mirrors the venue onto any existing Championship Game rows in `games`. Use `GET /api/v1/admin/championship-venue?season=YYYY` to review current assignments.
 
+Once MHSAA posts the championship schedule, set each class's kickoff on /moderate (Venues: Change on the class) or with `PUT /api/v1/admin/championship-venue/{season}/{class}/kickoff` and `{ "kickoff": "YYYY-MM-DDTHH:MM" }` in Central time. The bracket shows it under the venue, and a score report for the game starts on its day.
+
 ## Regions (every two years)
 
 MHSAA assigns classes and regions on a two-year cycle and publishes the next cycle's regions in the

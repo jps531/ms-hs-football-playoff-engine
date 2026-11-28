@@ -28,6 +28,7 @@ from backend.api.models.requests import (
     PatchTeamLogoRequest,
     SchoolLookOverrideField,
     SchoolOverrideField,
+    SetChampionshipKickoffRequest,
     SetGameHelmetRequest,
     SetGameOverrideRequest,
     SetLocationOverrideRequest,
@@ -223,6 +224,33 @@ async def assign_championship_venue(
     )
 
 
+@router.put("/championship-venue/{season}/{clazz}/kickoff", responses=_404)
+async def set_championship_kickoff(
+    season: int, clazz: int, body: SetChampionshipKickoffRequest
+) -> ChampionshipVenueAssignment:
+    """Set (or, with null, clear) when *season*'s *clazz* championship game starts: the bracket shows it
+    under the venue. The class needs its championship venue first (POST /championship-venue)."""
+    async with get_conn() as conn:
+        row = await (
+            await conn.execute(
+                """
+                UPDATE championship_venues cv
+                SET kickoff = (%s::timestamp AT TIME ZONE 'America/Chicago')
+                FROM locations l
+                WHERE cv.season = %s AND cv.class = %s AND l.id = cv.location_id
+                RETURNING cv.season, cv.class, cv.location_id, l.name, cv.kickoff
+                """,
+                (body.kickoff, season, clazz),
+            )
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"{season} {clazz}A has no championship venue; set one first")
+    _log.info("admin: championship kickoff season=%s class=%s kickoff=%s", season, clazz, body.kickoff)
+    return ChampionshipVenueAssignment(
+        season=row[0], class_=row[1], location_id=row[2], location_name=row[3], kickoff=row[4]
+    )
+
+
 @router.get("/championship-venue")
 async def list_championship_venues(
     season: Annotated[int | None, Query()] = None,
@@ -230,7 +258,7 @@ async def list_championship_venues(
     """Return all currently assigned championship venues, optionally filtered by season."""
     async with get_conn() as conn:
         sql_str = """
-            SELECT cv.season, cv.class, cv.location_id, l.name
+            SELECT cv.season, cv.class, cv.location_id, l.name, cv.kickoff
             FROM championship_venues cv
             JOIN locations l ON l.id = cv.location_id
         """
@@ -241,7 +269,7 @@ async def list_championship_venues(
         sql_str += " ORDER BY cv.season DESC, cv.class"
         rows = await conn.execute(sql_str, params)
         return [
-            ChampionshipVenueAssignment(season=r[0], class_=r[1], location_id=r[2], location_name=r[3])
+            ChampionshipVenueAssignment(season=r[0], class_=r[1], location_id=r[2], location_name=r[3], kickoff=r[4])
             async for r in rows
         ]
 

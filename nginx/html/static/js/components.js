@@ -2,7 +2,7 @@
 // identically in the browser and under `node --test`.
 
 import {
-  escapeHtml as esc, formatPct, oddsBucket, initials, teamUiColors, teamRawColors, isPale, marginText, isCertain,
+  escapeHtml as esc, formatPct, oddsBucket, initials, teamUiColors, teamRawColors, isPale, marginText, isCertain, kickoffText,
 } from "./format.js";
 import { playoffStatus } from "./standings.js";
 
@@ -179,13 +179,16 @@ export function championLine(champ) {
 }
 
 /**
- * Under the championship game's card in the bracket: where it's played, and
- * while it's still to play in Projected odds, the projected champion (*champ*,
- * or null). "" when there's neither. static_pages.final_note() is the same.
+ * Under the championship game's card in the bracket: where it's played, when
+ * (*venue*.kickoff, in Central time, when known), and while it's still to play
+ * in Projected odds, the projected champion (*champ*, or null). "" when there's
+ * none of them. static_pages.final_note() is the same.
  */
 export function finalNote(venue, champ) {
   const where = venueName(venue);
-  const parts = `${where ? `<p class="tfinal__venue">${esc(where)}</p>` : ""}${champ ? championLine(champ) : ""}`;
+  const when = kickoffText(venue?.kickoff);
+  const parts = `${where ? `<p class="tfinal__venue">${esc(where)}</p>` : ""}${when ? `<p class="tfinal__venue">${esc(when)}</p>` : ""}`
+    + `${champ ? championLine(champ) : ""}`;
   return parts ? `<div class="tfinal">${parts}</div>` : "";
 }
 

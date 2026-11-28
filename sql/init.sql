@@ -658,6 +658,7 @@ CREATE TABLE IF NOT EXISTS championship_venues (
   season      INTEGER NOT NULL,
   class       INTEGER NOT NULL,  -- MHSAA classification
   location_id INTEGER NOT NULL REFERENCES locations(id),
+  kickoff     TIMESTAMPTZ,       -- when the game starts (NULL: not known)
   PRIMARY KEY (season, class)
 );
 
@@ -1324,6 +1325,9 @@ COMMENT ON COLUMN championship_venues.season IS
   'Four-digit season year. Part of the primary key with class.';
 COMMENT ON COLUMN championship_venues.class IS
   'MHSAA classification (1-7). Part of the primary key with season.';
+COMMENT ON COLUMN championship_venues.kickoff IS
+  'When the championship game starts (NULL: not known). Shown under its venue on the bracket. '
+  'A moderator''s kickoff_time override on the Championship Game rows wins over it.';
 COMMENT ON COLUMN championship_venues.location_id IS
   'FK to locations(id). The venue hosting this season/class''s championship game. '
   'Set via POST /api/v1/admin/championship-venue, which also stamps the venue onto '

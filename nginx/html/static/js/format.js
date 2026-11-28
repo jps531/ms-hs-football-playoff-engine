@@ -110,6 +110,20 @@ function centralParts(iso) {
   return { day, clock: `${part("hour")}:${part("minute")}`, period: part("dayPeriod"), zone: part("timeZoneName") };
 }
 
+/** The day (YYYY-MM-DD) a moment falls on in Central time, or null for a missing or unreadable one. */
+export function centralDay(iso) {
+  if (!iso) return null;
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return null;
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(t);
+}
+
+/** When a game starts, in Central time: "Sat, Dec 5 · 12:00 PM CT"; "" for a missing or unreadable time. */
+export function kickoffText(iso) {
+  const p = centralParts(iso);
+  return p ? `${p.day} · ${p.clock} ${p.period} CT` : "";
+}
+
 /**
  * When a set of numbers was calculated, given the earliest and latest times
  * behind them: "Sat, Oct 24 at 9:10 AM CDT" when they share a minute,
