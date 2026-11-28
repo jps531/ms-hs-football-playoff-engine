@@ -75,10 +75,13 @@ const pick = (obj, key, mode) => {
   return mode === "projected" && w != null ? w : obj[key];
 };
 
-/** One side's occupants in the odds mode, likeliest first: [{ team, p, locked }]. */
+/**
+ * One side's occupants in the odds mode, likeliest first (ties by name): [{ team, p, locked, pw }].
+ * pw is the team's Projected chance, null without one: in Toss-up it only breaks a tie (shownFirst).
+ */
 export function occupants(side, mode) {
   return side.occupants
-    .map((o) => ({ team: o.team, p: pick(o, "p_reach", mode) ?? 0, locked: o.is_locked }))
+    .map((o) => ({ team: o.team, p: pick(o, "p_reach", mode) ?? 0, locked: o.is_locked, pw: o.p_reach_weighted ?? null }))
     .filter((o) => o.p > 0 || o.locked)
     .sort((a, b) => b.p - a.p || a.team.localeCompare(b.team));
 }
@@ -118,8 +121,10 @@ export function projectedChampion(game, result) {
  * slots of one round: Map of `${gameId}:${a|b}` to team. Taking every
  * (team, side) chance in the column, likeliest first, a team goes to the
  * side where it's likeliest and that side is filled; a side whose teams are
- * all likelier elsewhere falls back to its likeliest. Ties go to the better
- * seed (first round) or the earlier slot. A team already locked into or
+ * all likelier elsewhere falls back to its likeliest. In Toss-up, where many
+ * chances tie, a tie goes to the team with the better Projected chance (the
+ * Toss-up numbers shown don't change); then to the better seed (first round)
+ * or the earlier slot. A team already locked into or
  * playing in the column counts as placed. The game sheet still lists everyone.
  *
  * @param {{ games: { game: object }[] }} col  a column from treeColumns()
@@ -139,10 +144,10 @@ export function roundPicks(col, mode, results = {}) {
         return;
       }
       const rank = side.feeders.length === 1 ? side.feeders[0].seed : 2 * i + j;
-      occupants(side, mode).forEach((o) => open.push({ side: `${game.id}:${key}`, team: o.team, p: o.p, rank }));
+      occupants(side, mode).forEach((o) => open.push({ side: `${game.id}:${key}`, team: o.team, p: o.p, pw: o.pw, rank }));
     });
   });
-  open.sort((x, y) => y.p - x.p || x.rank - y.rank || x.team.localeCompare(y.team));
+  open.sort((x, y) => byOdds(x, y) || x.rank - y.rank || x.team.localeCompare(y.team));
   const picks = new Map();
   for (const o of open) {
     if (!picks.has(o.side) && !placed.has(o.team)) {
@@ -151,6 +156,21 @@ export function roundPicks(col, mode, results = {}) {
     }
   }
   return picks;
+}
+
+// Two chances this close are the same chance (each is a sum of fractions: 1/4 can come out 0.2500000001).
+const SAME = 1e-9;
+
+/** Likelier first: by the chance shown, then, on a tie, by the Projected chance (a missing one counts as 0). */
+function byOdds(x, y) {
+  if (Math.abs(y.p - x.p) > SAME) return y.p - x.p;
+  const d = (y.pw ?? 0) - (x.pw ?? 0);
+  return Math.abs(d) > SAME ? d : 0;
+}
+
+/** The side's team to show when nothing else picks one: its likeliest, a tie going by the Projected chance. */
+export function shownFirst(list) {
+  return list.reduce((best, o) => (byOdds(o, best) < 0 ? o : best), list[0]);
 }
 
 /** The team certain to fill a side, or null. */

@@ -5,18 +5,12 @@
 // buttons and fields. The pure pieces are exported for the tests.
 
 import { escapeHtml as esc } from "./format.js";
-import { input, invalid, overrideChanges, withOverride } from "./moderate-schools.js";
+import { input, invalid, json, overrideChanges, schoolFinder, withOverride } from "./moderate-schools.js";
+import { comboboxForm } from "./combobox.js";
 
 // --------------------------------------------------------------- shared
 
-/** The response's JSON, or an Error with the server's reason. */
-export async function json(res) {
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(typeof body.detail === "string" ? body.detail : `The server said ${res.status}.`);
-  }
-  return res.status === 204 ? null : res.json();
-}
+export { json }; // (moderate-schools.js's)
 
 /** A tab's status line: *text*, marked as an error when *bad*. */
 function setStatus(root, text, bad = false) {
@@ -140,10 +134,10 @@ export function gamesTab(root, { api, start = {}, onOpen = () => {} }) {
   let names = [];
   let data = null;
   let editing = null;
-  root.innerHTML = `<form class="ms-find" data-games-find role="search"><label for="mg-school" class="visually-hidden">Team</label>`
-    + `<input id="mg-school" list="mg-schools" placeholder="Find a team" autocomplete="off"><datalist id="mg-schools"></datalist>`
-    + `<label class="inline-select"><span class="visually-hidden">Season</span><select id="mg-season"></select></label>`
-    + `<button type="submit" class="mod-button">Open</button></form><p class="fb-status" data-tab-status role="status"></p><div data-games></div>`;
+  root.innerHTML = `<div class="ms-find">${comboboxForm({ id: "mg-school", placeholder: "Find a team", attrs: " data-games-find" })}`
+    + `<label class="ms-season"><span class="visually-hidden">Season</span><select id="mg-season"></select></label></div>`
+    + `<p class="fb-status" data-tab-status role="status"></p><div data-games></div>`;
+  const season = () => Number(root.querySelector("#mg-season").value);
 
   const draw = () => {
     const box = root.querySelector("[data-games]");
@@ -172,16 +166,7 @@ export function gamesTab(root, { api, start = {}, onOpen = () => {} }) {
 
   root.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (e.target.matches("[data-games-find]")) {
-      const typed = root.querySelector("#mg-school").value.trim();
-      const school = names.find((n) => n.toLowerCase() === typed.toLowerCase());
-      if (!school) {
-        setStatus(root, typed ? `No school is named “${typed}”.` : "", Boolean(typed));
-        return;
-      }
-      load(school, Number(root.querySelector("#mg-season").value)).catch((err) => setStatus(root, err.message, true));
-      return;
-    }
+    if (e.target.matches("[data-games-find]")) return; // the search box picks (schoolFinder)
     const form = e.target.closest("form[data-form=game]");
     if (!form || !checkForm(form)) return;
     const game = data.games.find((g) => g.date === form.dataset.date);
@@ -214,14 +199,18 @@ export function gamesTab(root, { api, start = {}, onOpen = () => {} }) {
     draw();
   });
 
-  Promise.all([api("/admin/schools").then(json), api("/seasons").then(json)]).then(([list, seasons]) => {
+  // A team picked opens its games in the season chosen; another season, once one's open, opens that.
+  root.querySelector("#mg-season").addEventListener("change", () => {
+    if (data) load(data.school, season()).catch((err) => setStatus(root, err.message, true));
+  });
+  const finder = schoolFinder(root.querySelector("[data-games-find]"), api, (school) => load(school, season()).catch((err) => setStatus(root, err.message, true)));
+  Promise.all([finder, api("/seasons").then(json)]).then(([list, seasons]) => {
     names = list;
-    root.querySelector("#mg-schools").innerHTML = list.map((n) => `<option value="${esc(n)}"></option>`).join("");
     root.querySelector("#mg-season").innerHTML = seasons.map((s) => `<option value="${s.season}">${s.season}</option>`).join("");
     if (start.season) root.querySelector("#mg-season").value = String(start.season);
     if (start.school && names.includes(start.school)) {
       root.querySelector("#mg-school").value = start.school;
-      load(start.school, Number(root.querySelector("#mg-season").value)).catch((err) => setStatus(root, err.message, true));
+      load(start.school, season()).catch((err) => setStatus(root, err.message, true));
     }
   }).catch((err) => setStatus(root, err.message, true));
 }
@@ -282,8 +271,9 @@ export function venuesTab(root, { api }) {
   let assigned = [];
   let editing = null;
   let filter = "";
-  root.innerHTML = `<div class="ms-find"><label for="mv-find" class="visually-hidden">Find a venue</label>`
-    + `<input id="mv-find" type="search" placeholder="Find a venue" autocomplete="off">`
+  // A filter, not a pick (the list below narrows as you type), in the search box's look.
+  root.innerHTML = `<div class="ms-find"><div class="team-search team-search--page"><label for="mv-find" class="visually-hidden">Find a venue</label>`
+    + `<input id="mv-find" type="search" placeholder="Find a venue" autocomplete="off" spellcheck="false"></div>`
     + `<button type="button" class="mod-button" data-edit="new-venue">Add a venue</button></div>`
     + `<p class="fb-status" data-tab-status role="status"></p><div data-venues></div>`;
 
@@ -389,10 +379,12 @@ export function describeOverride(row, venueNames = {}) {
 /** The Overrides tab's table: every override, grouped as listed. */
 export function overridesTable(rows, venueNames) {
   if (!rows.length) return `<p class="ms-src">No overrides on file.</p>`;
-  return `<div class="ms-table"><table><thead><tr><th scope="col">On</th><th scope="col">Field</th><th scope="col">Value</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead><tbody>`
+  // The roles are spelled out: on a phone the rows are laid out as blocks (app.css), which can cost a
+  // table its roles in some browsers.
+  return `<div class="ms-table"><table role="table"><thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">On</th><th scope="col" role="columnheader">Field</th><th scope="col" role="columnheader">Value</th><th scope="col" role="columnheader"><span class="visually-hidden">Actions</span></th></tr></thead><tbody role="rowgroup">`
     + rows.map((r, i) => {
       const d = describeOverride(r, venueNames);
-      return `<tr><td>${esc(d.what)}</td><td>${esc(r.key)}</td><td>${esc(r.value)}</td><td class="ms-act">`
+      return `<tr role="row"><td role="cell">${esc(d.what)}</td><td role="cell">${esc(r.key)}</td><td role="cell">${esc(r.value)}</td><td role="cell" class="ms-act">`
         + `<a class="mod-button" href="/moderate${esc(d.open)}">Open</a>`
         + (d.clear ? `<button type="button" class="mod-button" data-clear="${i}">Clear</button>` : `<span class="ms-src">An opponent correction</span>`)
         + "</td></tr>";

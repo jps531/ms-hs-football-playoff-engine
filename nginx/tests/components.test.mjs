@@ -67,11 +67,11 @@ test("team mark: helmet image, else a generic helmet in team colors, else a squi
 
 test("provenance carries the odds mode by glyph and type, not color", () => {
   const projected = provenance({ label: "Week 9", date: "x", mode: "projected" }, () => "Oct 24");
-  assert.equal(text(projected), "Through Week 9 · Oct 24 · Projected");
+  assert.equal(text(projected), "Through Week 9 · Oct 24 · Projected odds");
   assert.match(projected, /mode--projected"><svg/);
   const tossup = provenance({ label: "Week 9", mode: "tossup" }, () => "");
   assert.match(tossup, /mode--tossup"><svg/);
-  assert.equal(text(tossup), "Through Week 9 · Toss-up");
+  assert.equal(text(tossup), "Through Week 9 · Toss-up odds");
   assert.doesNotMatch(provenance({ label: "Week 9", mode: "bogus" }, () => ""), /mode/);
 });
 

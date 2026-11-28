@@ -90,16 +90,16 @@ def test_percent_and_ramp_match_the_site():
 
 def test_provenance_says_what_the_page_says():
     """Newest week the snapshot reaches; "Latest update" when it predates that week's last games."""
-    assert provenance(date(2026, 10, 9), DATES, "projected", date(2026, 10, 14)) == "Through Week 8 · Oct 9 · Projected"
+    assert provenance(date(2026, 10, 9), DATES, "projected", date(2026, 10, 14)) == "Through Week 8 · Oct 9 · Projected odds"
     assert (
         provenance(date(2026, 10, 2), DATES, "tossup", date(2026, 10, 14))
-        == "Through Week 7 · Latest update Oct 2 · Toss-up"
+        == "Through Week 7 · Latest update Oct 2 · Toss-up odds"
     )
     # Games on or after today don't count yet.
     assert (
-        provenance(date(2026, 10, 16), DATES, "projected", date(2026, 10, 16)) == "Through Week 8 · Oct 9 · Projected"
+        provenance(date(2026, 10, 16), DATES, "projected", date(2026, 10, 16)) == "Through Week 8 · Oct 9 · Projected odds"
     )
-    assert provenance(date(2026, 8, 20), [], "tossup", date(2026, 8, 21)) == "Updated Aug 20 · Toss-up"
+    assert provenance(date(2026, 8, 20), [], "tossup", date(2026, 8, 21)) == "Updated Aug 20 · Toss-up odds"
 
 
 def test_odds_mode_is_projected_only_when_weighted_odds_exist():

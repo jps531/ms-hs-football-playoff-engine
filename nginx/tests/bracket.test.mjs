@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   positionName, sideLabel, layoutResults, occupants, lockedTeam, gameState, hosting, matchups, byeSide, pathTo,
   matchupWays, championOdds, projectedChampion,
-  teamInGame, opponentsFor, pathGames, bracketStructure, treeColumns, treeLayout, roundPicks,
+  teamInGame, opponentsFor, pathGames, bracketStructure, treeColumns, treeLayout, roundPicks, shownFirst,
 } from "../html/static/js/bracket.js";
 
 const occ = (team, p, pw = p, locked = false) => ({ team, p_reach: p, p_reach_weighted: pw, is_locked: locked });
@@ -218,6 +218,20 @@ test("a tie goes to the better seed, and locked or played teams count as placed"
     r1("N-0-1", seedSide(2, [occ("A", 0.9), occ("B", 0.1)]), seedSide(4, [occ("D", 0.3)])),
   ] };
   assert.equal(roundPicks(locked, "tossup").get("N-0-1:a"), "B");
+});
+
+test("in Toss-up a tie goes to the better Projected chance, before the seed; the Toss-up odds shown don't change", () => {
+  // A later round: each side's teams all 50% in Toss-up; Projected has B and D ahead.
+  const side = (teams) => ({ feeders: [{ seed: 1 }, { seed: 2 }], occupants: teams });
+  const sf = { games: [{ game: { id: "N-1-0", side_a: side([occ("A", 0.5, 0.3), occ("B", 0.5, 0.7)]), side_b: side([occ("C", 0.5, 0.6), occ("D", 0.5000000001, 0.4)]) } }] };
+  const picks = roundPicks(sf, "tossup");
+  assert.equal(picks.get("N-1-0:a"), "B");
+  assert.equal(picks.get("N-1-0:b"), "C"); // 0.5000000001 is 0.5: the tie goes by Projected
+  assert.deepEqual(occupants(sf.games[0].game.side_a, "tossup").map((o) => [o.team, o.p]), [["A", 0.5], ["B", 0.5]]); // the list still by name
+  assert.equal(shownFirst(occupants(sf.games[0].game.side_a, "tossup")).team, "B");
+  // Without Projected odds the tie goes by name, as before.
+  const none = { feeders: [{ seed: 1 }, { seed: 2 }], occupants: [{ team: "B", p_reach: 0.5 }, { team: "A", p_reach: 0.5 }] };
+  assert.equal(shownFirst(occupants(none, "tossup")).team, "A");
 });
 
 test("a side whose every team is likelier elsewhere still shows its likeliest", () => {

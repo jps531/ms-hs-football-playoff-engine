@@ -3,8 +3,39 @@
 // each season. Every change goes through the admin API; the page reloads the school after each.
 // The pure pieces (labels, rows, forms) are exported for the tests.
 
+import { combobox, comboboxForm } from "./combobox.js";
 import { teamMark } from "./components.js";
 import { escapeHtml as esc } from "./format.js";
+
+/** The response's JSON, or an Error with the server's reason. */
+export async function json(res) {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : `The server said ${res.status}.`);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+/**
+ * A tab's school search (the site's search box, combobox.js): every school the site has, closed ones
+ * too, each with its helmet and, if it's playing this season, its region. *form* is comboboxForm's
+ * markup; *onPick(name)* opens one. Resolves to the names, once they're loaded.
+ */
+export async function schoolFinder(form, api, onPick) {
+  let items = [];
+  combobox(form, () => items, (school, input) => {
+    input.value = school.school;
+    onPick(school.school);
+  }, { one: "school", many: "schools", meta: (t) => (t.region == null ? "" : `Region ${t.region}-${t.class_}A`) });
+  const names = await api("/admin/schools").then(json);
+  // The latest season's looks, for the helmets (a school that isn't in it gets its initials).
+  const looks = await api("/seasons").then(json)
+    .then((seasons) => api(`/teams?season=${Math.max(...seasons.map((s) => s.season))}`).then(json))
+    .then((rows) => Object.fromEntries(rows.map((t) => [t.school, t])))
+    .catch(() => ({}));
+  items = names.map((n) => looks[n] ?? { school: n });
+  return names;
+}
 
 /** "2015–2019", "Through 2019", "2020 on", "Every season": a span of seasons (null: open). */
 export function spanLabel(first, last) {
@@ -312,14 +343,6 @@ export function schoolsTab(root, { api, upload, start = null, onSchool = () => {
       el.classList.toggle("is-error", bad);
     }
   };
-  const json = async (res) => {
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(typeof body.detail === "string" ? body.detail : `The server said ${res.status}.`);
-    }
-    return res.status === 204 ? null : res.json();
-  };
-
   const draw = () => {
     const body = root.querySelector("[data-ms-school]");
     body.innerHTML = data ? schoolHtml(data, editing) : "";
@@ -418,20 +441,12 @@ export function schoolsTab(root, { api, upload, start = null, onSchool = () => {
     }
   }
 
-  root.innerHTML = `<form class="ms-find" data-ms-find role="search"><label for="ms-school" class="visually-hidden">Find a school</label>`
-    + `<input id="ms-school" list="ms-schools" placeholder="Find a school" autocomplete="off"><datalist id="ms-schools"></datalist>`
-    + `<button type="submit" class="mod-button">Open</button></form>`
+  root.innerHTML = `<div class="ms-find">${comboboxForm({ id: "ms-school", placeholder: "Find a school", list: "Schools", attrs: " data-ms-find" })}</div>`
     + `<p class="fb-status" data-ms-status role="status"></p><div data-ms-school></div>`;
 
   root.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (e.target.matches("[data-ms-find]")) {
-      const typed = e.target.querySelector("input").value.trim();
-      const name = names.find((n) => n.toLowerCase() === typed.toLowerCase());
-      if (name) load(name).catch((err) => status(err.message, true));
-      else status(typed ? `No school is named “${typed}”.` : "", Boolean(typed));
-      return;
-    }
+    if (e.target.matches("[data-ms-find]")) return; // the search box picks (schoolFinder)
     const form = e.target.closest("form[data-form]");
     if (!form || !check(form)) return;
     const buttons = form.querySelectorAll("button");
@@ -496,9 +511,8 @@ export function schoolsTab(root, { api, upload, start = null, onSchool = () => {
     }
   });
 
-  api("/admin/schools").then(json).then((list) => {
+  schoolFinder(root.querySelector("[data-ms-find]"), api, (name) => load(name).catch((err) => status(err.message, true))).then((list) => {
     names = list;
-    root.querySelector("#ms-schools").innerHTML = list.map((n) => `<option value="${esc(n)}"></option>`).join("");
     if (start && names.includes(start)) {
       root.querySelector("#ms-school").value = start;
       load(start).catch((err) => status(err.message, true));
