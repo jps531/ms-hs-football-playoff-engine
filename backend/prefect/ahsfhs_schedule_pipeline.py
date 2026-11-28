@@ -74,7 +74,7 @@ def parse_ahsfhs_schedule(text: str, season: int, school_name: str, url: str, cl
         (?P<mon>[A-Z]{3,9})\.?,?\s+
         (?P<day>\d{1,2})\s+
         (?:(?P<loc>vs\.|@)\s+)?
-        (?P<opp>[A-Z&.'\- ]+)
+        (?P<opp>[A-Z&.'\- ]+?)   # as short as it can be: an unplayed game's round ("Semi-finals Playoffs") isn't its name
         (?:\s*(?P<star1>\*))?
         (?:\s+(?P<pfor>\d+)\s+(?P<pagn>\d+)\s+
             (?P<res>[WL]|\#(?:Won|Lost))
