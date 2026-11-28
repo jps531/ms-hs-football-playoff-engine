@@ -486,6 +486,12 @@ button { font: inherit; color: inherit; }
    change where the line breaks. */
 .provenance--controls .seg:is(.is-line-start, .is-shifted) { position: relative; left: calc(-1 * (var(--sep-w, 0px) + 6px)); }
 .ctl { display: inline-flex; align-items: center; gap: 4px; }
+/* On a phone the line wraps: each line is as tall as its controls, so they're 32px there, not 44px (still
+   over the 24px a target needs), to keep the wrapped line from spreading down the page. */
+@media (max-width: 40em) {
+  .provenance--controls .inline-select select { min-height: 32px; }
+  .provenance--controls .info-button { height: 32px; }
+}
 .inline-select select {
   appearance: none;
   field-sizing: content; /* hug the chosen option instead of the longest one */
@@ -1031,8 +1037,8 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
     max-height: calc(100vh - var(--header-h) - 48px); overflow-y: auto; margin-top: 26px;
   }
 }
-/* Narrow, with about.js: a bar under the header, "On this page · Projected and toss-up odds ⌄", opening
-   to the list over the text. */
+/* Narrow, with about.js: a bar under the header, "On this page ⌄" at the top and then the section
+   you're reading ("Projected and toss-up odds ⌄"), opening to the list over the text. */
 .toc.is-bar {
   position: sticky; top: var(--header-h); z-index: 9;
   margin: 16px -16px 0; padding: 0 16px;
@@ -1040,7 +1046,11 @@ details.scenario-group[open] > summary { margin-bottom: 6px; }
 }
 .toc.is-bar .toc__summary { min-height: 48px; align-items: center; cursor: pointer; }
 .toc.is-bar .toc__current { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 15px; color: var(--text-primary); }
-.toc.is-bar .toc__current:not(:empty)::before { content: "· "; color: var(--text-secondary); font-weight: 400; }
+/* Once you're in a section, the bar shows just its name: "On this page" is hidden from view, not from a
+   screen reader (the section's name is aria-hidden, so it stays the summary's name). */
+.toc.is-bar .toc__summary:has(.toc__current:not(:empty)) .toc__title {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
 .toc.is-bar .toc__chevron { display: block; flex: none; width: 18px; height: 18px; margin-left: auto; color: var(--text-secondary); transition: transform 0.15s; }
 .toc.is-bar details[open] .toc__chevron { transform: rotate(180deg); }
 .toc.is-bar details[open] > .toc__list { max-height: min(60vh, 28rem); overflow-y: auto; margin-top: 0; }
@@ -1538,7 +1548,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .fb-field { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
 .fb-field .muted { font-weight: 400; }
 .fb-form textarea, .fb-form input[type="email"], .fb-form input[type="date"], .fb-score input,
-.fb-form input[type="text"], .fb-form input[type="search"], .fb-form input[type="datetime-local"], .fb-form select, .ms-find input {
+.fb-form input[type="text"], .fb-form input[type="search"], .fb-form input[type="datetime-local"] {
   width: 100%; padding: 10px 12px;
   font: inherit; font-size: 16px; font-weight: 400; /* 16px: no iOS zoom on focus */
   color: var(--text-primary);
@@ -1697,7 +1707,7 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .ms-wide, .ms-save { grid-column: 1 / -1; }
 .ms-save { display: flex; flex-wrap: wrap; gap: 8px; }
 .ms-save .ms-danger { margin-left: auto; color: var(--state-eliminated); }
-.ms-find input { flex: 1; min-width: 0; }
+.ms-find .team-search { flex: 1 1 16rem; max-width: none; }
 .ms-form .fb-field small { font-size: 12px; font-weight: 400; color: var(--text-secondary); }
 .ms-form input[type="file"] { padding: 6px 0; font: inherit; font-size: 14px; }
 .ms-form .fb-field { min-width: 0; }
@@ -1715,6 +1725,18 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 .ms-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .ms-strip span { display: grid; justify-items: center; gap: 2px; padding: 6px 8px; font-size: 12px; color: var(--text-secondary); border: 1px solid var(--border); border-radius: 8px; }
 @media (max-width: 560px) { .ms-form { grid-template-columns: 1fr; } .ms-row, .ms-row--action, .ms-row--game { grid-template-columns: 1fr; gap: 2px; } }
+/* The overrides table on a phone: each override a block, what it's on and its field over its value (the
+   full width, to read), its buttons beside. The headers go unseen (the markup keeps the table's roles). */
+@media (max-width: 560px) {
+  .ms-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .ms-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 10px 0; box-shadow: inset 0 -1px var(--border); }
+  .ms-table td { display: block; padding: 0; box-shadow: none; }
+  .ms-table td:nth-child(1) { grid-column: 1; font-weight: 600; }
+  .ms-table td:nth-child(2) { grid-column: 1; font-size: 12px; color: var(--text-secondary); }
+  .ms-table td:nth-child(3) { grid-column: 1 / -1; }
+  .ms-table tbody tr:last-child { box-shadow: none; }
+  .ms-table td.ms-act { display: flex; grid-column: 2; grid-row: 1 / span 2; align-self: start; flex-wrap: nowrap; }
+}
 
 /* ------------------------------------------------------------ static page content
    What nginx includes before the app loads (backend/helpers/static_pages.py). */
@@ -1861,18 +1883,22 @@ body { padding-bottom: calc(57px + env(safe-area-inset-bottom)); }
 @media (max-width: 47.99em) { .detail__share { margin-left: 0; } }
 .share-sheet__body { display: grid; gap: 14px; }
 .share-sheet__group { display: grid; gap: 6px; }
-/* On a region page, which to share: the region or one of its teams. Also any boxed dropdown (.select-box:
-   a map's season and class on the Maps' Compare view). */
-.share-sheet__select, .select-box {
+/* The site's boxed dropdown: the browser's own (its own list, a phone's own picker, its keys), drawn to
+   match the text fields beside it: their height, border, corners and type. The share sheet's, the
+   Maps' Compare view's season and class (.select-box), and every form's (/moderate's, the feedback
+   form's). The provenance line's are a different thing: words in a sentence (.inline-select). */
+.share-sheet__select, .select-box, .fb-form select, .ms-season select, select[data-champ-season] {
   appearance: none;
-  justify-self: start; max-width: 100%; min-height: 44px; padding: 0 40px 0 14px;
-  font: inherit; font-size: 15px; color: var(--text-primary);
-  border: 1px solid var(--border); border-radius: 10px;
+  justify-self: start; max-width: 100%; min-height: 44px; padding: 10px 40px 10px 12px; /* the text fields' padding: their height */
+  font: inherit; font-size: 16px; font-weight: 400; color: var(--text-primary); /* 16px: no iOS zoom on focus */
+  border: 1px solid var(--border); border-radius: 8px;
+  cursor: pointer;
   /* Its own arrow (the controls line's), with room on both sides of it. */
   background: var(--surface-raised)
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237B7A7B' stroke-width='1.5'/%3E%3C/svg%3E")
     no-repeat right 16px center / 10px 6px;
 }
+.fb-form select { width: 100%; }
 .share-sheet__label {
   font-size: 12px; line-height: 16px; font-weight: 600;
   letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary);

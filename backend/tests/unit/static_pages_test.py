@@ -1288,7 +1288,7 @@ class TestReadability:
         for mode, name in (("projected", "Projected"), ("tossup", "Toss-up")):
             body = region_body(3, 6, _region(), STAMP, mode, {})
             caption = re.search(r"<caption>(.*?)</caption>", body).group(1)
-            assert f'<span class="mode mode--{mode}">' in caption and f"{name}</span> odds" in caption
+            assert f'<span class="mode mode--{mode}">' in caption and f"{name} odds</span>" in caption
         body = region_body(3, 6, _region(), STAMP, "projected", {})
         head = re.search(r"<thead>(.*?)</thead>", body).group(1)
         assert head.count("col-odds col-mid") == 3

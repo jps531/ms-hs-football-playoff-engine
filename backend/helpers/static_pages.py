@@ -169,7 +169,7 @@ MODE_ICONS = {
     '<circle cx="10.2" cy="5.8" r=".9" fill="currentColor" stroke="none"/>'
     '<circle cx="5.8" cy="10.2" r=".9" fill="currentColor" stroke="none"/></svg>',
 }
-MODE_LABELS = {"projected": "Projected", "tossup": "Toss-up"}
+MODE_LABELS = {"projected": "Projected odds", "tossup": "Toss-up odds"}
 # The Explanation's lightbulb (ICONS.bulb in components.js).
 BULB_ICON = (
     '<svg class="outcome__explain-icon" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" '
@@ -321,7 +321,7 @@ def table_mode(mode: str) -> str:
         return ""
     return (
         f'<span class="table-mode" aria-hidden="true"><span class="mode mode--{mode}">'
-        f"{MODE_ICONS[mode]}{MODE_LABELS[mode]}</span> odds</span>"
+        f"{MODE_ICONS[mode]}{MODE_LABELS[mode]}</span></span>"
     )
 
 
@@ -1271,13 +1271,35 @@ def _pick(obj: dict, key: str, mode: str) -> float | None:
 
 
 def occupants(side: dict, mode: str) -> list[dict]:
-    """Who might fill a side, likeliest first (bracket.js's ``occupants``)."""
+    """Who might fill a side, likeliest first, ties by name (bracket.js's ``occupants``). ``pw``: the
+    team's Projected chance (None without one), which in Toss-up only breaks a tie (``shown_first``)."""
     out = [
-        {"team": o["team"], "p": _pick(o, "p_reach", mode) or 0.0, "locked": o.get("is_locked")}
+        {
+            "team": o["team"],
+            "p": _pick(o, "p_reach", mode) or 0.0,
+            "locked": o.get("is_locked"),
+            "pw": o.get("p_reach_weighted"),
+        }
         for o in side.get("occupants") or []
     ]
     out = [o for o in out if o["p"] > 0 or o["locked"]]
     return sorted(out, key=lambda o: (-o["p"], o["team"]))
+
+
+# Two chances this close are the same chance (each is a sum of fractions: 1/4 can come out 0.2500000001).
+_SAME = 1e-9
+
+
+def _by_odds(p: float, pw: float | None) -> tuple[float, float]:
+    """A sort key, likelier first: the chance shown, then, on a tie, the Projected chance (a missing one
+    counts as 0), each rounded to _SAME (bracket.js's ``byOdds``)."""
+    return (-round(p / _SAME) * _SAME, -round((pw or 0.0) / _SAME) * _SAME)
+
+
+def shown_first(listed: list[dict]) -> dict:
+    """The side's team to show when nothing else picks one: its likeliest, a tie going by the Projected
+    chance (bracket.js's ``shownFirst``)."""
+    return min(listed, key=lambda o: _by_odds(o["p"], o["pw"]))
 
 
 def locked_team(side: dict) -> str | None:
@@ -1291,7 +1313,8 @@ def round_picks(col: dict, mode: str, results: dict) -> dict[str, str]:
 
     Taking every (team, side) chance in the column, likeliest first, a team goes to the side where
     it's likeliest and that side is filled; a side whose teams are all likelier elsewhere falls back
-    to its likeliest. Ties go to the better seed (first round) or the earlier slot. A team locked
+    to its likeliest. In Toss-up, a tie goes to the better Projected chance; then to the better seed
+    (first round) or the earlier slot. A team locked
     into or playing in the column counts as placed.
     """
     placed: set[str] = set()
@@ -1308,9 +1331,9 @@ def round_picks(col: dict, mode: str, results: dict) -> dict[str, str]:
                 continue
             feeders = side.get("feeders") or []
             rank = feeders[0]["seed"] if len(feeders) == 1 else 2 * i + j
-            open_sides += [(f"{game['id']}:{key}", o["team"], o["p"], rank) for o in occupants(side, mode)]
+            open_sides += [(f"{game['id']}:{key}", o["team"], o["p"], rank, o["pw"]) for o in occupants(side, mode)]
     picks: dict[str, str] = {}
-    for side_id, team, _, _ in sorted(open_sides, key=lambda o: (-o[2], o[3], o[1])):
+    for side_id, team, _, _, _ in sorted(open_sides, key=lambda o: (*_by_odds(o[2], o[4]), o[3], o[1])):
         if side_id not in picks and team not in placed:
             picks[side_id] = team
             placed.add(team)
@@ -1446,7 +1469,7 @@ def _tree_row(game: dict, side_key: str, result: dict | None, gutter: str, ctx: 
     else:
         sub = f"+{len(listed) - 1} more" if len(listed) > 1 else ""
     pick = (ctx.get("picks") or {}).get(f"{game['id']}:{side_key}")
-    shown = next((o for o in listed if o["team"] == pick), listed[0])
+    shown = next((o for o in listed if o["team"] == pick), None) or shown_first(listed)
     value = _odds(shown["p"]) + '<span class="visually-hidden"> chance to play here</span>'
     return _tree_line(gutter, shown["team"], shown["team"], teams, sub, value, "")
 

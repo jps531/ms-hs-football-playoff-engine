@@ -30,8 +30,8 @@ export function oddsCell(p) {
 // ------------------------------------------------------- provenance line
 
 export const ODDS_MODES = {
-  projected: { label: "Projected", glyph: ICONS.trend },
-  tossup: { label: "Toss-up", glyph: ICONS.dice },
+  projected: { label: "Projected odds", glyph: ICONS.trend },
+  tossup: { label: "Toss-up odds", glyph: ICONS.dice },
 };
 
 /** The odds-mode segment: trend glyph for Projected, dice + italic for Toss-up. */
@@ -46,14 +46,14 @@ export function modeLabel(mode) {
  * the mode from the caption's own words.
  */
 export function tableMode(mode) {
-  return ODDS_MODES[mode] ? `<span class="table-mode" aria-hidden="true">${modeLabel(mode)} odds</span>` : "";
+  return ODDS_MODES[mode] ? `<span class="table-mode" aria-hidden="true">${modeLabel(mode)}</span>` : "";
 }
 
 /**
  * What the reader is looking at. Each segment owns its leading separator so
  * an omitted segment never leaves an orphaned dot.
  *   { label: "Week 9", date: "2025-10-24" }  -> "Through Week 9 · Oct 24"
- *   { ..., mode: "projected" }               -> "... · Projected" (trend glyph)
+ *   { ..., mode: "projected" }               -> "... · Projected odds" (trend glyph)
  *   { live: true, label: "Week 9" }          -> "● LIVE · Week 9"
  */
 export function provenance({ label, date, live = false, mode = null } = {}, formatDate = (d) => d) {

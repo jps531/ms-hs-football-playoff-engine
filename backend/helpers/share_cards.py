@@ -150,7 +150,7 @@ def provenance(as_of: date | None, dates: list[dict], mode: str | None, today: d
     elif as_of is not None:
         parts.append(f"Updated {short_date(as_of)}")
     if mode:  # None where nothing shown has odds, so the mode would say nothing
-        parts.append("Projected" if mode == "projected" else "Toss-up")
+        parts.append("Projected odds" if mode == "projected" else "Toss-up odds")
     return " · ".join(parts)
 
 

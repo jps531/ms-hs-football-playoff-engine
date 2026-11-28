@@ -279,7 +279,7 @@ leave no orphaned dot:
 - **Time** — `Through Week 9 · Oct 24` is the default and most common state.
   If games are in progress, `● LIVE · Week 9` with the dot and text in
   `--state-live`.
-- **Mode** — `· Projected` with a trend glyph, or `· Toss-up` with a dice
+- **Mode** — `· Projected odds` with a trend glyph, or `· Toss-up odds` with a dice
   glyph in italic. Omit entirely if odds mode isn't implemented.
 - Sim segment: not in this build.
 
