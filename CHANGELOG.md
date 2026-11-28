@@ -5,6 +5,11 @@ site is in every page's footer. Versions are MAJOR.MINOR.PATCH: MAJOR for a chan
 MINOR for a new feature or a change in how the numbers are worked out, PATCH for a fix
 ([CONTRIBUTING.md](CONTRIBUTING.md#releases)).
 
+## 1.50.2
+
+The projected champion under the championship game, in its game's sheet, sits on the same line as
+"Projected champion:" again; it was set a little lower.
+
 ## 1.50.1
 
 A fix for playoff games AHSFHS lists before they're played. AHSFHS writes the round after the
